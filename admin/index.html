@@ -570,6 +570,7 @@
   .lv-period-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
   .lv-period-badge.cur { background: var(--primary-light); color: var(--primary); }
   .lv-period-badge.done { background: #E5E7EB; color: #4B5563; }
+  .lv-period-badge.none { background: var(--accent-orange-light); color: var(--accent-orange); }
   .lv-period-toggle { font-size: 14px; color: var(--text-sub); flex-shrink: 0; transition: transform 0.2s; }
   .lv-period.open .lv-period-toggle { transform: rotate(180deg); }
   .lv-period-body { display: none; border-top: 1px solid var(--border); }
@@ -610,6 +611,12 @@
     </div>
     <div class="sidebar-item" onclick="showPage('teamlimit')" id="nav-teamlimit">
       <span>🔢</span><span>팀 인원 제한</span>
+    </div>
+    <div class="sidebar-item" onclick="showPage('notice')" id="nav-notice">
+      <span>📢</span><span>공지사항</span>
+    </div>
+    <div class="sidebar-item" onclick="showPage('overtime')" id="nav-overtime">
+      <span>⏰</span><span>추가근무 합산</span>
     </div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-item" onclick="window.location.href='../staff/index.html'" style="color:rgba(255,255,255,0.5);">
@@ -740,6 +747,11 @@
           <div class="page-title">연차 제한 관리</div>
           <div class="page-sub">날짜를 클릭해 팀별 연차 신청 가능 인원을 조정하세요. 설정이 없는 날은 기본 규칙(진료팀A·B/데스크A·B는 수요일 2명·그 외 1명, 나머지 팀은 1명)이 적용됩니다.</div>
         </div>
+      </div>
+
+      <!-- 진료팀 상근/주4일 분리 카운트 토글 -->
+      <div id="tlFulltimeToggles" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-bottom:16px">
+        <span style="font-size:13px;font-weight:700;color:var(--text-sub)">🩺 진료팀 상근/주4일 별도 제한:</span>
       </div>
 
       <div class="calendar-header">
@@ -900,6 +912,48 @@
       </div>
     </div>
 
+    <!-- 공지사항 페이지 -->
+    <div id="page-notice" class="hidden">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📢 공지사항</div>
+          <div class="page-sub">월별 공지를 등록하고 완료 체크·댓글을 남기세요</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <input type="month" id="noticeMonth" class="form-input" style="width:180px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px" onchange="onNoticeMonthChange()">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:18px">
+        <input class="staff-edit-input" id="newNoticeText" placeholder="새 공지 내용 입력" style="flex:1" onkeydown="if(event.key==='Enter') addNotice()">
+        <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="addNotice()">+ 공지 추가</button>
+      </div>
+      <div id="noticeList" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+
+    <!-- 추가근무 합산 페이지 -->
+    <div id="page-overtime" class="hidden">
+      <div class="page-header">
+        <div>
+          <div class="page-title">⏰ 추가근무 합산</div>
+          <div class="page-sub">월별 직원 추가근무(승인건) 합산 시간을 확인하세요</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <select id="otMonth" class="form-input" style="width:200px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px" onchange="renderOvertimePage()"></select>
+      </div>
+      <div class="lv-history-card">
+        <div class="table-wrap">
+          <table class="lv-history-table">
+            <thead><tr>
+              <th style="width:120px">이름</th><th style="width:120px">팀</th>
+              <th>날짜별 내역</th><th style="width:120px;text-align:right">월 합산</th>
+            </tr></thead>
+            <tbody id="otTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div>
 
@@ -930,6 +984,8 @@ let allStaff = [];
 let teamLimits = {}; // (구) 팀별 제한 - team_list 마이그레이션 호환용으로만 유지
 let teamList = [];   // [{ id, name, order }] - team_list 컬렉션
 let dateLimits = {}; // { 'YYYY-MM-DD': { '팀명': 연차제한수 } } - date_limits 컬렉션
+let notices = [];    // [{ id, month, text, done, ts, comments:[] }] - notices 컬렉션
+let noticeMonth = ''; // 선택된 공지 월 (YYYY-MM)
 let calYear, calMonth;
 let tlYear, tlMonth, tlModalDate = '';
 let editingStaff = {};
@@ -973,7 +1029,7 @@ window.doLogout = function() {
 };
 
 async function initAdmin() {
-  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits(), loadDateLimits()]);
+  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits(), loadDateLimits(), loadNotices()]);
   await loadTeamList();
   renderCalendar();
   renderLeaveTable();
@@ -981,6 +1037,11 @@ async function initAdmin() {
   renderTeamLimitCalendar();
   updateStats();
   document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
+  // 공지/추가근무 월 기본값
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  noticeMonth = ym;
+  document.getElementById('noticeMonth').value = ym;
+  populateOtMonths();
 }
 
 // ─── 데이터 로드 ───
@@ -1066,7 +1127,7 @@ function refreshStaffTeamDropdowns() {
 
 // ─── 페이지 전환 ───
 window.showPage = function(page) {
-  ['requests','leave','staff','teamlimit','teams'].forEach(p => {
+  ['requests','leave','staff','teamlimit','teams','notice','overtime'].forEach(p => {
     document.getElementById(`page-${p}`)?.classList.add('hidden');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
@@ -1074,6 +1135,8 @@ window.showPage = function(page) {
   document.getElementById(`nav-${page}`)?.classList.add('active');
   if (page === 'teamlimit') renderTeamLimitCalendar();
   if (page === 'teams') renderTeamsPage();
+  if (page === 'notice') renderNoticePage();
+  if (page === 'overtime') renderOvertimePage();
 };
 
 // ─── 통계 ───
@@ -1243,6 +1306,18 @@ function getDeductMin(dateStr, workType) {
   if (workType !== '주4일') return 480;
   const dow = new Date(dateStr + 'T00:00:00').getDay();
   return [0,3,6].includes(dow) ? 480 : 630;
+}
+
+// 날짜 계산 유틸 (연차 기간용)
+function addYears(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setFullYear(d.getFullYear() + n);
+  return d.toISOString().slice(0,10);
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
 }
 
 // 근무년수 기준 자동 연차 일수
@@ -1467,23 +1542,27 @@ window.selectLeaveStaff = function(staffId) {
     .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
     .sort((a, b) => ((a.periodEnd || a.date || '') < (b.periodEnd || b.date || '')) ? -1 : 1);
 
+  // 연차 기간 = 입사일 기준 1년 단위 (1기: 입사일 ~ 입사일+1년-1일)
+  const joinStr = staff.joinDate || todayStr;
   const periods = [];
-  let prevEnd = staff.joinDate || todayStr;
+  let prevEnd = null;
   settlements.forEach((s, idx) => {
-    const start = s.periodStart || prevEnd;
-    const end = s.periodEnd || s.date;
+    const start = s.periodStart || (prevEnd ? addDays(prevEnd, 1) : joinStr);
+    const end = s.periodEnd || addDays(addYears(start, 1), -1);
     periods.push({ start, end, settlement: s, isCurrent: false, isFirst: idx === 0 });
     prevEnd = end;
   });
-  periods.push({ start: prevEnd, end: todayStr, settlement: null, isCurrent: true, isFirst: settlements.length === 0 });
+  const curStart = prevEnd ? addDays(prevEnd, 1) : joinStr;
+  const curEnd = addDays(addYears(curStart, 1), -1);
+  periods.push({ start: curStart, end: curEnd, settlement: null, isCurrent: true, isFirst: settlements.length === 0 });
 
   // 각 기간 아코디언 HTML (최신 기간이 위로)
   const periodsHtml = periods.map((p, idx) => {
-    // 기간 내 항목 (정산 doc 제외, 날짜 범위 [start, end) / 현재기는 [start, 오늘])
+    // 기간 내 항목 (정산 doc 제외, 날짜 범위 [start, end] 포함 / 현재기는 [start, ~])
     const entries = allRequests
       .filter(r => r.staffName === staff.name &&
         (r.type === 'leave' || (['bonus','deduct','salary_deduct'].includes(r.type) && r.status === 'approved')) &&
-        r.date && r.date >= p.start && (p.isCurrent ? true : r.date < p.end))
+        r.date && r.date >= p.start && (p.isCurrent ? true : r.date <= p.end))
       .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
 
     // 기간 요약
@@ -1504,7 +1583,8 @@ window.selectLeaveStaff = function(staffId) {
     });
     const baseP = p.isFirst ? baseTotalMin : 0;
     const totalP = baseP + bonusP;
-    const remainP = p.isCurrent ? (totalP - usedP - deductP + salaryP) : 0;
+    // 정산완료 기간은 0, 그 외(현재/미정산)는 실제 잔여
+    const remainP = p.settlement ? 0 : (totalP - usedP - deductP + salaryP);
 
     // 행: 기간 항목 + (정산 완료 기간이면 정산 row를 마지막에)
     const rows = p.settlement ? [...entries, p.settlement] : entries;
@@ -1512,14 +1592,16 @@ window.selectLeaveStaff = function(staffId) {
 
     const badge = p.isCurrent
       ? `<span class="lv-period-badge cur">진행중</span>`
-      : `<span class="lv-period-badge done">정산완료</span>`;
+      : p.settlement
+      ? `<span class="lv-period-badge done">정산완료</span>`
+      : `<span class="lv-period-badge none">미정산</span>`;
     const rColor = remainP < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
 
     return `
       <div class="lv-period ${p.isCurrent ? 'open' : ''}" id="period-${idx}">
         <div class="lv-period-header" onclick="togglePeriod(${idx})">
           <div style="flex:1;min-width:0">
-            <div class="lv-period-range">${p.start} ~ ${p.isCurrent ? '현재' : p.end} ${badge}</div>
+            <div class="lv-period-range">${p.start} ~ ${p.end} ${badge}</div>
             <div class="lv-period-sum">보유 ${fmtMin(totalP)} · 사용 ${fmtMin(usedP + deductP)} · 잔여 <span style="color:${rColor};font-weight:800">${fmtMinSigned(remainP)}</span></div>
           </div>
           <div class="lv-period-toggle">▾</div>
@@ -1802,23 +1884,23 @@ window.submitSettle = async function() {
   const date = new Date().toISOString().slice(0,10);
   const settleKind = remainMin > 0 ? '급여 지급 정산' : remainMin < 0 ? '급여 차감 정산' : '정산';
 
-  // 현재기 시작 = 마지막 정산의 periodEnd, 없으면 입사일 → 이번 정산으로 기간 마감
+  // 현재기 = 입사일 기준 1년 단위. 마지막 정산 다음날부터 시작
   const prevSettles = allRequests
     .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
     .sort((a, b) => ((a.periodEnd || a.date || '') < (b.periodEnd || b.date || '')) ? -1 : 1);
-  const periodStart = prevSettles.length
-    ? (prevSettles[prevSettles.length - 1].periodEnd || prevSettles[prevSettles.length - 1].date)
-    : (staff.joinDate || date);
-  const periodEnd = date;
+  const lastEnd = prevSettles.length ? (prevSettles[prevSettles.length - 1].periodEnd || prevSettles[prevSettles.length - 1].date) : null;
+  const periodStart = lastEnd ? addDays(lastEnd, 1) : (staff.joinDate || date);
+  const periodEnd = addDays(addYears(periodStart, 1), -1); // 입사일+1년-1일 규칙
+  const nextStart = addDays(periodEnd, 1);                  // 다음 기간 시작 = 신규 연차 부여일
 
   // 1) 정산: 잔여를 0으로 (settlementMin = 현재 잔여), 기간 [periodStart, periodEnd] 마감
-  // 2) 포상: 새 연차 부여 (다음 기간 시작)
+  // 2) 포상: 새 연차 부여 (다음 기간 시작일자로 기록)
   const docs = [
     { type:'settlement', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
       settlementMin: remainMin, periodStart, periodEnd,
       memo: `${settleKind} · 잔여 ${fmtMinSigned(remainMin)} → 0${memo ? ' · ' + memo : ''}`,
       createdAt: serverTimestamp() },
-    { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+    { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date: nextStart,
       bonusMin: newLeaveMin, leaveAmount: -newLeaveMin, leaveSubType:'settlement',
       memo: `정산 후 신규 연차 ${newDays}개 부여${memo ? ' · ' + memo : ''}`,
       createdAt: serverTimestamp() },
@@ -1935,6 +2017,44 @@ function effectiveLeaveLimit(team, dateStr) {
   return defaultLeaveLimit(team, dateStr);
 }
 
+// ─── 진료팀 상근/주4일 별도 제한 ───
+const FULLTIME_SPLIT_TEAMS = ['진료팀A', '진료팀B'];
+function isFulltimeSplit(team) {
+  return FULLTIME_SPLIT_TEAMS.includes(team) && !!(teamLimits[team] && teamLimits[team].fulltimeOnly);
+}
+function staffTypeOf(name) {
+  const s = allStaff.find(x => x.name === name);
+  return (s && s.type === '주4일') ? '주4일' : '상근';
+}
+// 해당 날짜+팀 연차 신청 수 (wtype 지정 시 근무유형별 카운트)
+function teamLeaveCount(dateStr, team, wtype) {
+  return allRequests.filter(r =>
+    r.date === dateStr && r.staffTeam === team && r.type === 'leave' && r.status !== 'rejected' &&
+    (wtype ? staffTypeOf(r.staffName) === wtype : true)
+  ).length;
+}
+
+// 진료팀 상근/주4일 토글 렌더 + 저장
+function renderFulltimeToggles() {
+  const box = document.getElementById('tlFulltimeToggles');
+  if (!box) return;
+  box.innerHTML = '<span style="font-size:13px;font-weight:700;color:var(--text-sub)">🩺 진료팀 상근/주4일 별도 제한:</span>' +
+    FULLTIME_SPLIT_TEAMS.map(team => {
+      const on = !!(teamLimits[team] && teamLimits[team].fulltimeOnly);
+      return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleFulltimeOnly('${team}', this.checked)" style="width:16px;height:16px;cursor:pointer">
+        ${team} <span style="color:var(--text-sub);font-weight:400">상근만</span>
+      </label>`;
+    }).join('');
+}
+window.toggleFulltimeOnly = async function(team, checked) {
+  if (!teamLimits[team]) teamLimits[team] = {};
+  teamLimits[team].fulltimeOnly = checked;
+  try { await setDoc(doc(db, 'team_limits', team), teamLimits[team]); } catch(e) {}
+  renderTeamLimitCalendar();
+  showToast(checked ? `${team} 상근/주4일 별도 카운트 ON` : `${team} 별도 카운트 OFF`);
+};
+
 // ─── date_limits 로드 ───
 async function loadDateLimits() {
   try {
@@ -1955,6 +2075,7 @@ window.tlChangeMonth = function(dir) {
 };
 
 function renderTeamLimitCalendar() {
+  renderFulltimeToggles();
   document.getElementById('tlMonthLabel').textContent = `${tlYear}년 ${tlMonth+1}월`;
   const firstDay = new Date(tlYear, tlMonth, 1).getDay();
   const daysInMonth = new Date(tlYear, tlMonth+1, 0).getDate();
@@ -1971,14 +2092,18 @@ function renderTeamLimitCalendar() {
     const isToday = dateStr === todayStr;
     const cls = ['cal-day', dow===0?'sun':'', dow===6?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
 
-    const dayLeaves = allRequests.filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected');
     const chips = teams.map(team => {
-      const cur = dayLeaves.filter(r => r.staffTeam === team).length;
       const limit = effectiveLeaveLimit(team, dateStr);
       const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
-      const full = cur >= limit;
       const short = team.replace('팀', '');
-      return `<div class="tl-chip ${full ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short} ${cur}/${limit}</div>`;
+      if (isFulltimeSplit(team)) {
+        const cf = teamLeaveCount(dateStr, team, '상근');
+        const cp = teamLeaveCount(dateStr, team, '주4일');
+        return `<div class="tl-chip ${cf >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short}·상근 ${cf}/${limit}</div>` +
+               `<div class="tl-chip ${cp >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short}·주4 ${cp}/${limit}</div>`;
+      }
+      const cur = teamLeaveCount(dateStr, team, null);
+      return `<div class="tl-chip ${cur >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short} ${cur}/${limit}</div>`;
     }).join('');
 
     container.innerHTML += `
@@ -2004,21 +2129,29 @@ function renderTlModalBody() {
   const teams = getTeamNames();
   const body = document.getElementById('tlModalBody');
   if (!teams.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sub)">등록된 팀이 없습니다</div>'; return; }
-  const dayLeaves = allRequests.filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected');
-
   body.innerHTML = teams.map(team => {
-    const cur = dayLeaves.filter(r => r.staffTeam === team).length;
     const limit = effectiveLeaveLimit(team, dateStr);
     const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
+    let curInfo, over;
+    if (isFulltimeSplit(team)) {
+      const cf = teamLeaveCount(dateStr, team, '상근');
+      const cp = teamLeaveCount(dateStr, team, '주4일');
+      curInfo = `상근 ${cf}명 · 주4일 ${cp}명 (각각 제한 적용)`;
+      over = cf > limit || cp > limit;
+    } else {
+      const cur = teamLeaveCount(dateStr, team, null);
+      curInfo = `현재 신청 ${cur}명`;
+      over = cur > limit;
+    }
     return `
       <div class="tl-modal-row">
         <div>
-          <div class="tl-modal-team">${team}${isCustom ? '<span class="tl-custom-tag">커스텀</span>' : ''}</div>
-          <div class="tl-modal-cur">현재 신청 ${cur}명</div>
+          <div class="tl-modal-team">${team}${isCustom ? '<span class="tl-custom-tag">커스텀</span>' : ''}${isFulltimeSplit(team) ? '<span class="tl-custom-tag" style="background:var(--primary-light);color:var(--primary)">상근분리</span>' : ''}</div>
+          <div class="tl-modal-cur">${curInfo}</div>
         </div>
         <div class="tl-stepper">
           <button onclick="adjustDateLimit('${team}',-1)">−</button>
-          <span class="${cur > limit ? 'over' : ''}">${limit}</span>
+          <span class="${over ? 'over' : ''}">${limit}</span>
           <button onclick="adjustDateLimit('${team}',1)">+</button>
           <span class="tl-unit">명</span>
         </div>
@@ -2360,6 +2493,170 @@ window.saveStaff = async function(id) {
   renderLeaveTable();
   showToast('✅ 저장되었습니다');
 };
+
+// ═══════════════ 공지사항 ═══════════════
+async function loadNotices() {
+  try {
+    const snap = await getDocs(collection(db, 'notices'));
+    notices = snap.docs.map(d => ({ id: d.id, ...d.data(), comments: [] }));
+    // 각 공지의 댓글 로드
+    for (const n of notices) {
+      try {
+        const cs = await getDocs(collection(db, 'notices', n.id, 'comments'));
+        n.comments = cs.docs.map(c => ({ id: c.id, ...c.data() }));
+      } catch(e) { n.comments = []; }
+    }
+  } catch(e) {
+    notices = [];
+  }
+}
+
+window.onNoticeMonthChange = function() {
+  noticeMonth = document.getElementById('noticeMonth').value;
+  renderNoticePage();
+};
+
+function renderNoticePage() {
+  if (!noticeMonth) {
+    noticeMonth = document.getElementById('noticeMonth').value || new Date().toISOString().slice(0,7);
+    document.getElementById('noticeMonth').value = noticeMonth;
+  }
+  const list = notices.filter(n => n.month === noticeMonth).sort((a,b) => (a.ts||0) - (b.ts||0));
+  const box = document.getElementById('noticeList');
+  if (!list.length) {
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub);font-size:13px">이 달의 공지가 없습니다</div>';
+    return;
+  }
+  box.innerHTML = list.map(n => {
+    const comments = (n.comments || []).slice().sort((a,b) => (a.ts||0) - (b.ts||0));
+    const cHtml = comments.length
+      ? comments.map(c => `<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--border)"><b style="color:var(--primary)">${(c.author||'익명')}</b> <span style="color:var(--text)">${(c.text||'').replace(/</g,'&lt;')}</span></div>`).join('')
+      : '<div style="font-size:12px;color:var(--text-sub);padding:6px 0">댓글 없음</div>';
+    return `
+      <div class="col-card" style="padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="checkbox" ${n.done ? 'checked' : ''} onchange="toggleNoticeDone('${n.id}', this.checked)" style="width:18px;height:18px;cursor:pointer;flex-shrink:0">
+          <div style="flex:1;font-size:14px;font-weight:600;${n.done ? 'text-decoration:line-through;color:var(--text-sub)' : ''}">${(n.text||'').replace(/</g,'&lt;')}</div>
+          <button class="lh-action-btn lh-reject" onclick="deleteNotice('${n.id}')">🗑 삭제</button>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-sub);margin-bottom:2px">💬 메모/댓글 (${comments.length})</div>
+          ${cHtml}
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input class="staff-edit-input" id="cmt-input-${n.id}" placeholder="댓글 입력" style="flex:1" onkeydown="if(event.key==='Enter') addComment('${n.id}')">
+            <button class="btn-edit" onclick="addComment('${n.id}')">등록</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.addNotice = async function() {
+  const text = document.getElementById('newNoticeText').value.trim();
+  if (!text) { showToast('공지 내용을 입력하세요'); return; }
+  const n = { month: noticeMonth, text, done: false, ts: Date.now(), createdAt: serverTimestamp() };
+  try {
+    const ref = await addDoc(collection(db, 'notices'), n);
+    n.id = ref.id;
+  } catch(e) {
+    n.id = 'n' + Date.now();
+  }
+  n.comments = [];
+  notices.push(n);
+  document.getElementById('newNoticeText').value = '';
+  renderNoticePage();
+  showToast('📢 공지가 추가되었습니다');
+};
+
+window.toggleNoticeDone = async function(id, done) {
+  const n = notices.find(x => x.id === id);
+  if (!n) return;
+  n.done = done;
+  try { await updateDoc(doc(db, 'notices', id), { done }); } catch(e) {}
+  renderNoticePage();
+};
+
+window.deleteNotice = async function(id) {
+  if (!confirm('이 공지를 삭제하시겠습니까?')) return;
+  try { await deleteDoc(doc(db, 'notices', id)); } catch(e) {}
+  const i = notices.findIndex(x => x.id === id);
+  if (i >= 0) notices.splice(i, 1);
+  renderNoticePage();
+  showToast('🗑 공지가 삭제되었습니다');
+};
+
+window.addComment = async function(noticeId) {
+  const input = document.getElementById(`cmt-input-${noticeId}`);
+  const text = input.value.trim();
+  if (!text) return;
+  const c = { author: '관리자', text, ts: Date.now(), createdAt: serverTimestamp() };
+  try {
+    const ref = await addDoc(collection(db, 'notices', noticeId, 'comments'), c);
+    c.id = ref.id;
+  } catch(e) {
+    c.id = 'c' + Date.now();
+  }
+  const n = notices.find(x => x.id === noticeId);
+  if (n) { n.comments = n.comments || []; n.comments.push(c); }
+  input.value = '';
+  renderNoticePage();
+};
+
+// ═══════════════ 추가근무 합산 ═══════════════
+function populateOtMonths() {
+  const sel = document.getElementById('otMonth');
+  if (!sel) return;
+  let opts = '';
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    opts += `<option value="${v}">${d.getFullYear()}년 ${d.getMonth()+1}월</option>`;
+  }
+  sel.innerHTML = opts;
+}
+
+function extraMinutes(r) {
+  if (!r.startTime || !r.endTime) return 0;
+  const [sh,sm] = r.startTime.split(':').map(Number);
+  const [eh,em] = r.endTime.split(':').map(Number);
+  return Math.max(0, (eh*60+em) - (sh*60+sm));
+}
+
+function renderOvertimePage() {
+  const month = document.getElementById('otMonth').value;
+  const tbody = document.getElementById('otTbody');
+  if (!month) { tbody.innerHTML = ''; return; }
+
+  const extras = allRequests.filter(r => r.type === 'extra' && r.status === 'approved' && r.date && r.date.startsWith(month));
+  const byStaff = {};
+  extras.forEach(r => {
+    if (!byStaff[r.staffName]) byStaff[r.staffName] = { name: r.staffName, team: r.staffTeam || '-', items: [], total: 0 };
+    const mins = extraMinutes(r);
+    byStaff[r.staffName].items.push({ date: r.date, start: r.startTime, end: r.endTime, mins });
+    byStaff[r.staffName].total += mins;
+  });
+
+  const rows = Object.values(byStaff).sort((a,b) =>
+    (a.team < b.team ? -1 : a.team > b.team ? 1 : (a.name < b.name ? -1 : 1)));
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-sub)">해당 월의 승인된 추가근무가 없습니다</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(s => {
+    const detail = s.items.sort((a,b)=> (a.date<b.date?-1:1)).map(it =>
+      `<span style="display:inline-block;background:var(--accent-green-light);color:var(--accent-green);border-radius:6px;padding:2px 7px;margin:2px;font-size:11px;font-weight:600">${(it.date||'').slice(5)} ${it.start||''}~${it.end||''} (${fmtMin(it.mins)})</span>`
+    ).join('');
+    return `
+      <tr>
+        <td style="font-weight:700;white-space:nowrap">${s.name}</td>
+        <td style="color:var(--text-sub)">${s.team}</td>
+        <td>${detail}</td>
+        <td style="text-align:right;font-weight:800;color:var(--accent-green);white-space:nowrap">${fmtMin(s.total)}</td>
+      </tr>`;
+  }).join('');
+}
 
 </script>
 </body>
