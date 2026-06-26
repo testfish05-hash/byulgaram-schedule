@@ -559,6 +559,7 @@
   .lh-bonus { background: var(--accent-green-light); color: var(--accent-green); }
   .lh-deduct { background: var(--accent-red-light); color: var(--accent-red); }
   .lh-settle { background: #E5E7EB; color: #4B5563; }
+  .lh-salary { background: var(--accent-red-light); color: var(--accent-red); }
 
   /* ── 연차 기간 아코디언 ── */
   .lv-period { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
@@ -846,6 +847,31 @@
       </div>
     </div>
 
+    <!-- 마이너스 급여차감 모달 -->
+    <div id="salaryModal" class="tl-modal-overlay hidden" onclick="closeSalaryModal(event)">
+      <div class="tl-modal">
+        <div class="tl-modal-header">
+          <div class="tl-modal-title">💸 마이너스 연차 급여차감</div>
+          <button class="tl-modal-x" onclick="closeSalaryModalForce()">✕</button>
+        </div>
+        <div class="tl-modal-body">
+          <div class="lv-adj-field">
+            <label>현재 마이너스 잔여</label>
+            <div style="font-size:24px;font-weight:800;color:var(--accent-red)" id="salaryRemain">-</div>
+            <div style="font-size:13px;color:var(--text-sub);margin-top:6px;font-weight:600">이 시간만큼 급여에서 차감 후 잔여를 0으로 처리합니다.</div>
+          </div>
+          <div class="lv-adj-field">
+            <label>메모</label>
+            <textarea id="salaryMemo" placeholder="급여차감 사유·내용을 입력하세요"></textarea>
+          </div>
+        </div>
+        <div class="tl-modal-footer">
+          <button class="btn-edit" onclick="closeSalaryModalForce()">취소</button>
+          <button class="btn-primary" style="width:auto;padding:9px 18px;background:var(--accent-red)" onclick="submitSalaryDeduct()">급여차감 확인</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 팀 관리 페이지 -->
     <div id="page-teams" class="hidden">
       <div class="page-header">
@@ -1052,8 +1078,8 @@ window.showPage = function(page) {
 
 // ─── 통계 ───
 function updateStats() {
-  // 포상/차감/정산은 근무 신청 통계에서 제외
-  const reqs = allRequests.filter(r => !['bonus','deduct','settlement'].includes(r.type));
+  // 포상/차감/정산/급여차감은 근무 신청 통계에서 제외
+  const reqs = allRequests.filter(r => !['bonus','deduct','settlement','salary_deduct'].includes(r.type));
   const pending = reqs.filter(r => r.status === 'pending').length;
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
@@ -1100,7 +1126,7 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayOfWeek = new Date(calYear, calMonth, d).getDay();
-    const dayReqs = allRequests.filter(r => r.date === dateStr && !['bonus','deduct','settlement'].includes(r.type));
+    const dayReqs = allRequests.filter(r => r.date === dateStr && !['bonus','deduct','settlement','salary_deduct'].includes(r.type));
 
     const isSun = dayOfWeek === 0, isSat = dayOfWeek === 6;
     const isToday = dateStr === todayStr;
@@ -1266,8 +1292,14 @@ function calcLeaveMinutes(staff) {
     .reduce((sum, r) => sum + (r.settlementMin || 0), 0);
   usedMin += settlementMin;
 
+  // 마이너스 급여차감: deductMin(양수 절댓값)을 usedMin에서 빼서 마이너스 잔여를 0으로 복구
+  const salaryDeductMin = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'salary_deduct' && r.status === 'approved')
+    .reduce((sum, r) => sum + (r.deductMin || 0), 0);
+  usedMin -= salaryDeductMin;
+
   const remainMin = totalMin - usedMin - deductMin;
-  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, settlementMin, remainMin, totalDays, years, minPerDay };
+  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, settlementMin, salaryDeductMin, remainMin, totalDays, years, minPerDay };
 }
 
 // 분 → "Xh Ym" 문자열
@@ -1335,6 +1367,14 @@ function ledgerRowsHtml(staff, staffId, rows, startMin) {
       runMin -= amt;
       typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
       amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
+      remainCell = fmtMinSigned(runMin);
+      actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+      docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+    } else if (r.type === 'salary_deduct') {
+      const amt = r.deductMin || 0; // 양수, 마이너스 잔여 복구
+      runMin += amt;
+      typeLabel = '💸 급여차감'; typeCls = 'lh-salary';
+      amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
       remainCell = fmtMinSigned(runMin);
       actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
       docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
@@ -1442,15 +1482,16 @@ window.selectLeaveStaff = function(staffId) {
     // 기간 내 항목 (정산 doc 제외, 날짜 범위 [start, end) / 현재기는 [start, 오늘])
     const entries = allRequests
       .filter(r => r.staffName === staff.name &&
-        (r.type === 'leave' || ((r.type === 'bonus' || r.type === 'deduct') && r.status === 'approved')) &&
+        (r.type === 'leave' || (['bonus','deduct','salary_deduct'].includes(r.type) && r.status === 'approved')) &&
         r.date && r.date >= p.start && (p.isCurrent ? true : r.date < p.end))
       .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
 
     // 기간 요약
-    let bonusP = 0, usedP = 0, deductP = 0;
+    let bonusP = 0, usedP = 0, deductP = 0, salaryP = 0;
     entries.forEach(r => {
       if (r.type === 'bonus') bonusP += (r.bonusMin || 0);
       else if (r.type === 'deduct') deductP += (r.deductMin || 0);
+      else if (r.type === 'salary_deduct') salaryP += (r.deductMin || 0);
       else if (r.type === 'leave' && r.status === 'approved') {
         if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
           const [sh,sm] = r.startTime.split(':').map(Number);
@@ -1463,7 +1504,7 @@ window.selectLeaveStaff = function(staffId) {
     });
     const baseP = p.isFirst ? baseTotalMin : 0;
     const totalP = baseP + bonusP;
-    const remainP = p.isCurrent ? (totalP - usedP - deductP) : 0;
+    const remainP = p.isCurrent ? (totalP - usedP - deductP + salaryP) : 0;
 
     // 행: 기간 항목 + (정산 완료 기간이면 정산 row를 마지막에)
     const rows = p.settlement ? [...entries, p.settlement] : entries;
@@ -1489,6 +1530,7 @@ window.selectLeaveStaff = function(staffId) {
               <button class="lh-action-btn" style="background:var(--accent-green-light);color:var(--accent-green);border:1.5px solid var(--accent-green)" onclick="openBonusModal('${staffId}')">🎁 포상 연차 추가</button>
               <button class="lh-action-btn" style="background:var(--accent-red-light);color:var(--accent-red);border:1.5px solid var(--accent-red)" onclick="openDeductModal('${staffId}')">➖ 연차 차감</button>
               <button class="lh-action-btn" style="background:var(--primary-light);color:var(--primary);border:1.5px solid var(--primary)" onclick="openSettleModal('${staffId}')">🧾 연차 정산</button>
+              ${remainP < 0 ? `<button class="lh-action-btn" style="background:var(--accent-red);color:#fff;border:1.5px solid var(--accent-red);font-weight:800" onclick="openSalaryDeductModal('${staffId}')">💸 마이너스 급여차감</button>` : ''}
             </div>` : ''}
           ${rows.length === 0
             ? `<div class="lv-empty">내역이 없습니다</div>`
@@ -1794,6 +1836,56 @@ window.submitSettle = async function() {
   selectLeaveStaff(staffId);
   updateStats();
   showToast('🧾 연차 정산이 완료되었습니다');
+};
+
+// ─── 마이너스 연차 급여차감 ───
+let salaryStaffId = null;
+
+window.openSalaryDeductModal = function(staffId) {
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+  const { remainMin } = calcLeaveMinutes(staff);
+  if (remainMin >= 0) { showToast('마이너스 잔여가 없습니다'); return; }
+  salaryStaffId = staffId;
+  document.getElementById('salaryRemain').textContent = fmtMinSigned(remainMin);
+  document.getElementById('salaryMemo').value = '';
+  document.getElementById('salaryModal').classList.remove('hidden');
+};
+
+window.closeSalaryModal = function(e) {
+  if (e.target === document.getElementById('salaryModal')) closeSalaryModalForce();
+};
+window.closeSalaryModalForce = function() {
+  document.getElementById('salaryModal').classList.add('hidden');
+};
+
+window.submitSalaryDeduct = async function() {
+  const staffId = salaryStaffId;
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+  const { remainMin } = calcLeaveMinutes(staff);
+  if (remainMin >= 0) { showToast('마이너스 잔여가 없습니다'); closeSalaryModalForce(); return; }
+  const amt = Math.abs(remainMin); // 마이너스 절댓값(양수)
+  const memo = document.getElementById('salaryMemo').value.trim();
+  const date = new Date().toISOString().slice(0,10);
+
+  const data = { type:'salary_deduct', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+    deductMin: amt,
+    memo: `급여차감 ${fmtMin(amt)} → 잔여 0${memo ? ' · ' + memo : ''}`,
+    createdAt: serverTimestamp() };
+  try {
+    const ref = await addDoc(collection(db, 'schedule_requests'), data);
+    data.id = ref.id;
+  } catch(e) {
+    data.id = 'sd-' + Date.now();
+  }
+  allRequests.push({ ...data, createdAt: null });
+
+  closeSalaryModalForce();
+  renderLeaveTable();
+  selectLeaveStaff(staffId);
+  updateStats();
+  showToast('💸 급여차감 처리되었습니다 (잔여 0)');
 };
 
 // ─── 팀 인원 제한 ───
