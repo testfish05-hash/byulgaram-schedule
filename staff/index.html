@@ -568,7 +568,7 @@ window.doLogin = async function() {
   document.getElementById('cardTeam').textContent = team;
 
   populateSwapTarget();
-  await Promise.all([loadDateLimits(), loadTeamFlags()]);
+  await Promise.all([loadDateLimits(), loadTeamLimits()]);
   // 실시간 구독 시작 (snapshot 수신 시 renderCalendar/loadHistory/loadUserLeave 자동 호출)
   subscribeRequests();
 };
@@ -596,53 +596,53 @@ async function loadDateLimits() {
   }
 }
 
-// 진료팀 상근/주4일 별도 제한 플래그 로드
-let teamFulltimeOnly = {}; // { '진료팀A': true }
-async function loadTeamFlags() {
+// ── 풀(진료/데스크) 전역 제한 로드 ──
+let teamLimits = {}; // { 'pool_진료': {maxLeave}, ... }
+async function loadTeamLimits() {
   try {
     const snap = await getDocs(collection(db, 'team_limits'));
-    teamFulltimeOnly = {};
-    snap.forEach(d => { if (d.data().fulltimeOnly) teamFulltimeOnly[d.id] = true; });
+    teamLimits = {};
+    snap.forEach(d => { teamLimits[d.id] = d.data(); });
   } catch {
-    teamFulltimeOnly = {};
+    teamLimits = {};
   }
-}
-const FULLTIME_SPLIT_TEAMS = ['진료팀A', '진료팀B'];
-function isFulltimeSplit(team) {
-  return FULLTIME_SPLIT_TEAMS.includes(team) && !!teamFulltimeOnly[team];
-}
-function staffTypeOf(name) {
-  const s = allStaff.find(x => x.name === name);
-  return (s && s.type === '주4일') ? '주4일' : '상근';
 }
 
-// 기본 규칙: 진료팀A·진료팀B·데스크A·데스크B는 수요일 2명·그 외 1명, 나머지 팀은 1명
-const WED_SPECIAL_TEAMS = ['진료팀A', '진료팀B', '데스크A', '데스크B'];
-function defaultLeaveLimit(team, dateStr) {
-  if (WED_SPECIAL_TEAMS.includes(team)) {
-    const dow = new Date(dateStr + 'T00:00:00').getDay(); // 3 = 수요일
-    return dow === 3 ? 2 : 1;
-  }
-  return 1;
+// 팀 → 제한 그룹 키 ("진료"/"데스크" 포함 시 풀, 그 외 팀명)
+function poolKeyOf(team) {
+  if (team && team.includes('진료')) return 'pool_진료';
+  if (team && team.includes('데스크')) return 'pool_데스크';
+  return team || '미지정';
 }
-// 해당 날짜+팀 연차 제한 (커스텀 우선, 없으면 기본 규칙)
-function effectiveLeaveLimit(team, dateStr) {
+function groupLabel(key) {
+  if (key === 'pool_진료') return '진료';
+  if (key === 'pool_데스크') return '데스크';
+  return (key || '').replace('팀', '');
+}
+function groupDefaultLimit(key) {
+  return (teamLimits[key] && teamLimits[key].maxLeave != null) ? teamLimits[key].maxLeave : 1;
+}
+// 날짜+그룹 제한 (date_limits 커스텀 우선, 없으면 전역 기본)
+function groupLimit(dateStr, key) {
   const custom = dateLimits[dateStr];
-  if (custom && custom[team] != null) return custom[team];
-  return defaultLeaveLimit(team, dateStr);
+  if (custom && custom[key] != null) return custom[key];
+  return groupDefaultLimit(key);
+}
+// 날짜+그룹 연차 신청 수 (같은 풀 소속 모든 팀 합산)
+function groupLeaveCount(dateStr, key) {
+  return allRequests.filter(r =>
+    r.date === dateStr && r.type === 'leave' && r.status !== 'rejected' && poolKeyOf(r.staffTeam) === key
+  ).length;
+}
+// 팀 기준 실제 제한 (달력 배지 호환용)
+function effectiveLeaveLimit(team, dateStr) {
+  return groupLimit(dateStr, poolKeyOf(team));
 }
 
 // 특정 날짜+팀+유형의 현재 신청 수 (rejected 제외)
 function countTeamReqs(date, team, type) {
   return allRequests.filter(r =>
     r.date === date && r.staffTeam === team && r.type === type && r.status !== 'rejected'
-  ).length;
-}
-// 근무유형별 연차 신청 수
-function countTeamLeaveByType(date, team, wtype) {
-  return allRequests.filter(r =>
-    r.date === date && r.staffTeam === team && r.type === 'leave' && r.status !== 'rejected' &&
-    staffTypeOf(r.staffName) === wtype
   ).length;
 }
 
@@ -660,24 +660,17 @@ function checkLimit(date, type) {
 
   const team = currentUser?.team;
   if (!team) return { ok: true };
-  const max = effectiveLeaveLimit(team, date);
+
+  // 진료/데스크 풀 합산 기준으로 제한 확인
+  const key = poolKeyOf(team);
+  const max = groupLimit(date, key);
 
   // 이미 내 신청이 있으면 카운트에 포함 → 차단 안 함
   if (myReqExists(date, 'leave')) return { ok: true };
 
-  // 진료팀 상근/주4일 별도 제한: 내 근무유형 기준으로만 카운트
-  if (isFulltimeSplit(team)) {
-    const myType = (currentUser?.type === '주4일') ? '주4일' : '상근';
-    const curT = countTeamLeaveByType(date, team, myType);
-    if (curT >= max) {
-      return { ok: false, reason: `${team} ${myType} 연차 신청이 마감되었습니다 (${curT}/${max}명)` };
-    }
-    return { ok: true };
-  }
-
-  const cur = countTeamReqs(date, team, 'leave');
+  const cur = groupLeaveCount(date, key);
   if (cur >= max) {
-    return { ok: false, reason: `${team} 연차 신청이 마감되었습니다 (${cur}/${max}명)` };
+    return { ok: false, reason: `${groupLabel(key)} 연차 신청이 마감되었습니다 (${cur}/${max}명)` };
   }
   return { ok: true };
 }
@@ -831,14 +824,14 @@ function renderCalendar() {
       return `<span class="${cls}">${icon}${r.staffName}</span>`;
     }
 
-    const maxPerCol = 3;
-    const leftChips  = leftReqs.slice(0, maxPerCol).map(makeChip).join('');
-    const rightChips = rightReqs.slice(0, maxPerCol).map(makeChip).join('');
-    const leftMore   = leftReqs.length  > maxPerCol ? `<span class="cal-more">+${leftReqs.length - maxPerCol}</span>` : '';
-    const rightMore  = rightReqs.length > maxPerCol ? `<span class="cal-more">+${rightReqs.length - maxPerCol}</span>` : '';
+    // 신청자 이름을 세로로 한명씩 모두 나열 (좌: 연차+교체 / 우: 추가근무)
+    const leftChips  = leftReqs.map(makeChip).join('');
+    const rightChips = rightReqs.map(makeChip).join('');
+    const leftMore = '', rightMore = '';
 
+    // 가운데 얇은 세로 구분선 (좌우 모두 신청자 있을 때만)
     const colsDivider = (leftReqs.length > 0 && rightReqs.length > 0)
-      ? `<div style="width:1px;background:var(--border);flex-shrink:0;margin-top:2px"></div>` : '';
+      ? `<div style="width:1px;background:#E2E8F0;flex-shrink:0;margin-top:2px"></div>` : '';
 
     // 날짜 헤더: 날짜 번호 + 팀별 카운트 배지
     const myTeam = currentUser?.team;
@@ -852,14 +845,15 @@ function renderCalendar() {
       return `<span class="cal-team-badge ${isFull ? 'full' : 'ok'}">${icon}${cur}/${max}</span>`;
     }
 
-    // 팀 전체 현황 배지 (진료N/데스크N 형식) - 연차 제한 기준
-    const teams = [...new Set(allRequests.filter(r => r.date === dateStr && r.type === 'leave').map(r => r.staffTeam))];
-    const teamCountBadges = teams.map(t => {
-      const cnt = allRequests.filter(r => r.date === dateStr && r.staffTeam === t && r.type === 'leave' && r.status !== 'rejected').length;
-      const max = effectiveLeaveLimit(t, dateStr);
+    // 풀/팀 현황 배지 (진료N/데스크N 형식) - 풀 합산 기준
+    const groupKeys = [...new Set(allRequests
+      .filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected')
+      .map(r => poolKeyOf(r.staffTeam)))];
+    const teamCountBadges = groupKeys.map(key => {
+      const cnt = groupLeaveCount(dateStr, key);
+      const max = groupLimit(dateStr, key);
       const full = cnt >= max;
-      const shortName = t.replace('팀','');
-      return `<span class="cal-team-badge ${full ? 'full' : 'ok'}">${shortName}${cnt}/${max}</span>`;
+      return `<span class="cal-team-badge ${full ? 'full' : 'ok'}">${groupLabel(key)}${cnt}/${max}</span>`;
     }).join('');
 
     container.innerHTML += `

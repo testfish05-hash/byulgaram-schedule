@@ -745,14 +745,12 @@
       <div class="page-header" style="margin-bottom:16px">
         <div>
           <div class="page-title">연차 제한 관리</div>
-          <div class="page-sub">날짜를 클릭해 팀별 연차 신청 가능 인원을 조정하세요. 설정이 없는 날은 기본 규칙(진료팀A·B/데스크A·B는 수요일 2명·그 외 1명, 나머지 팀은 1명)이 적용됩니다.</div>
+          <div class="page-sub">"진료" 포함 팀은 진료 풀, "데스크" 포함 팀은 데스크 풀로 합산됩니다. 카드에서 기본 제한을, 달력 날짜 클릭으로 날짜별 제한을 조정하세요.</div>
         </div>
       </div>
 
-      <!-- 진료팀 상근/주4일 분리 카운트 토글 -->
-      <div id="tlFulltimeToggles" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-bottom:16px">
-        <span style="font-size:13px;font-weight:700;color:var(--text-sub)">🩺 진료팀 상근/주4일 별도 제한:</span>
-      </div>
+      <!-- 풀/팀 기본 제한 카드 -->
+      <div id="tlLimitCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:20px"></div>
 
       <div class="calendar-header">
         <div class="cal-nav" onclick="tlChangeMonth(-1)">‹</div>
@@ -1997,62 +1995,85 @@ function getTeamNames() {
   return [...new Set([...fromStaff, ...fromLimits])];
 }
 
-// ─── 연차 기본 제한 규칙 (하드코딩) ───
-// 진료팀A·진료팀B·데스크A·데스크B: 수요일 2명 / 그 외 요일 1명
-// 그 외 모든 팀: 요일 관계없이 1명
-const WED_SPECIAL_TEAMS = ['진료팀A', '진료팀B', '데스크A', '데스크B'];
-
-function defaultLeaveLimit(team, dateStr) {
-  if (WED_SPECIAL_TEAMS.includes(team)) {
-    const dow = new Date(dateStr + 'T00:00:00').getDay(); // 3 = 수요일
-    return dow === 3 ? 2 : 1;
-  }
-  return 1;
+// ─── 연차 제한: 풀(진료/데스크) + 개별 팀 ───
+// 팀 이름에 "진료" 포함 → pool_진료, "데스크" 포함 → pool_데스크, 그 외 → 팀명 자체
+function poolKeyOf(team) {
+  if (team && team.includes('진료')) return 'pool_진료';
+  if (team && team.includes('데스크')) return 'pool_데스크';
+  return team || '미지정';
 }
-
-// 해당 날짜+팀의 실제 적용 제한 (커스텀 우선, 없으면 기본 규칙)
-function effectiveLeaveLimit(team, dateStr) {
+function groupLabel(key) {
+  if (key === 'pool_진료') return '진료';
+  if (key === 'pool_데스크') return '데스크';
+  return (key || '').replace('팀', '');
+}
+// 제한 그룹 키 목록 (진료/데스크 풀 + 나머지 개별 팀)
+function limitGroups() {
+  const teams = getTeamNames();
+  const groups = [];
+  if (teams.some(t => t.includes('진료'))) groups.push('pool_진료');
+  if (teams.some(t => t.includes('데스크'))) groups.push('pool_데스크');
+  teams.filter(t => !t.includes('진료') && !t.includes('데스크')).forEach(t => groups.push(t));
+  return groups;
+}
+// 그룹의 기본(전역) 제한값: team_limits[key].maxLeave, 없으면 1
+function groupDefaultLimit(key) {
+  return (teamLimits[key] && teamLimits[key].maxLeave != null) ? teamLimits[key].maxLeave : 1;
+}
+// 날짜+그룹의 실제 제한 (date_limits 커스텀 우선)
+function groupLimit(dateStr, key) {
   const custom = dateLimits[dateStr];
-  if (custom && custom[team] != null) return custom[team];
-  return defaultLeaveLimit(team, dateStr);
+  if (custom && custom[key] != null) return custom[key];
+  return groupDefaultLimit(key);
 }
-
-// ─── 진료팀 상근/주4일 별도 제한 ───
-const FULLTIME_SPLIT_TEAMS = ['진료팀A', '진료팀B'];
-function isFulltimeSplit(team) {
-  return FULLTIME_SPLIT_TEAMS.includes(team) && !!(teamLimits[team] && teamLimits[team].fulltimeOnly);
-}
-function staffTypeOf(name) {
-  const s = allStaff.find(x => x.name === name);
-  return (s && s.type === '주4일') ? '주4일' : '상근';
-}
-// 해당 날짜+팀 연차 신청 수 (wtype 지정 시 근무유형별 카운트)
-function teamLeaveCount(dateStr, team, wtype) {
+// 날짜+그룹 연차 신청 수 (같은 풀 소속 모든 팀 합산, rejected 제외)
+function groupLeaveCount(dateStr, key) {
   return allRequests.filter(r =>
-    r.date === dateStr && r.staffTeam === team && r.type === 'leave' && r.status !== 'rejected' &&
-    (wtype ? staffTypeOf(r.staffName) === wtype : true)
+    r.date === dateStr && r.type === 'leave' && r.status !== 'rejected' && poolKeyOf(r.staffTeam) === key
   ).length;
 }
 
-// 진료팀 상근/주4일 토글 렌더 + 저장
-function renderFulltimeToggles() {
-  const box = document.getElementById('tlFulltimeToggles');
-  if (!box) return;
-  box.innerHTML = '<span style="font-size:13px;font-weight:700;color:var(--text-sub)">🩺 진료팀 상근/주4일 별도 제한:</span>' +
-    FULLTIME_SPLIT_TEAMS.map(team => {
-      const on = !!(teamLimits[team] && teamLimits[team].fulltimeOnly);
-      return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer">
-        <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleFulltimeOnly('${team}', this.checked)" style="width:16px;height:16px;cursor:pointer">
-        ${team} <span style="color:var(--text-sub);font-weight:400">상근만</span>
-      </label>`;
-    }).join('');
+// 팀 기준 실제 제한 (스탭 배지/호환용)
+function effectiveLeaveLimit(team, dateStr) {
+  return groupLimit(dateStr, poolKeyOf(team));
 }
-window.toggleFulltimeOnly = async function(team, checked) {
-  if (!teamLimits[team]) teamLimits[team] = {};
-  teamLimits[team].fulltimeOnly = checked;
-  try { await setDoc(doc(db, 'team_limits', team), teamLimits[team]); } catch(e) {}
+
+// ─── 풀/팀 전역 제한 카드 ───
+function renderLimitCards() {
+  const box = document.getElementById('tlLimitCards');
+  if (!box) return;
+  const groups = limitGroups();
+  const teams = getTeamNames();
+  box.innerHTML = groups.map(key => {
+    const isPool = key.startsWith('pool_');
+    const members = isPool ? teams.filter(t => poolKeyOf(t) === key) : [key];
+    const cur = groupDefaultLimit(key);
+    const memberStr = isPool ? members.join(', ') : `${members.length}개 팀`;
+    return `
+      <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;border-top:3px solid ${isPool ? 'var(--primary)' : 'var(--accent-purple)'}">
+        <div style="font-size:14px;font-weight:800">${isPool ? '🩺 ' : ''}${groupLabel(key)}${isPool ? ' 풀' : ''}</div>
+        <div style="font-size:11px;color:var(--text-sub);margin:2px 0 10px;min-height:14px">${isPool ? '합산: ' + (members.length ? memberStr : '없음') : '개별 팀'}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--primary-light);border-radius:8px;padding:8px 10px">
+          <span style="font-size:12px;font-weight:700;color:var(--primary)">🌴 기본 제한</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="adjustPoolLimit('${key}',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
+            <span style="font-size:18px;font-weight:800;color:var(--primary);min-width:24px;text-align:center">${cur}</span>
+            <button onclick="adjustPoolLimit('${key}',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
+            <span style="font-size:11px;color:var(--text-sub)">명</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+window.adjustPoolLimit = async function(key, delta) {
+  if (!teamLimits[key]) teamLimits[key] = {};
+  let next = Math.max(0, groupDefaultLimit(key) + delta);
+  if (next > 20) next = 20;
+  teamLimits[key].maxLeave = next;
+  try { await setDoc(doc(db, 'team_limits', key), teamLimits[key]); } catch(e) {}
+  renderLimitCards();
   renderTeamLimitCalendar();
-  showToast(checked ? `${team} 상근/주4일 별도 카운트 ON` : `${team} 별도 카운트 OFF`);
+  showToast(`${groupLabel(key)} 기본 제한: ${next}명`);
 };
 
 // ─── date_limits 로드 ───
@@ -2075,12 +2096,12 @@ window.tlChangeMonth = function(dir) {
 };
 
 function renderTeamLimitCalendar() {
-  renderFulltimeToggles();
+  renderLimitCards();
   document.getElementById('tlMonthLabel').textContent = `${tlYear}년 ${tlMonth+1}월`;
   const firstDay = new Date(tlYear, tlMonth, 1).getDay();
   const daysInMonth = new Date(tlYear, tlMonth+1, 0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
-  const teams = getTeamNames();
+  const groups = limitGroups();
   const container = document.getElementById('tlCalDays');
   container.innerHTML = '';
 
@@ -2092,18 +2113,12 @@ function renderTeamLimitCalendar() {
     const isToday = dateStr === todayStr;
     const cls = ['cal-day', dow===0?'sun':'', dow===6?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
 
-    const chips = teams.map(team => {
-      const limit = effectiveLeaveLimit(team, dateStr);
-      const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
-      const short = team.replace('팀', '');
-      if (isFulltimeSplit(team)) {
-        const cf = teamLeaveCount(dateStr, team, '상근');
-        const cp = teamLeaveCount(dateStr, team, '주4일');
-        return `<div class="tl-chip ${cf >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short}·상근 ${cf}/${limit}</div>` +
-               `<div class="tl-chip ${cp >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short}·주4 ${cp}/${limit}</div>`;
-      }
-      const cur = teamLeaveCount(dateStr, team, null);
-      return `<div class="tl-chip ${cur >= limit ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short} ${cur}/${limit}</div>`;
+    const chips = groups.map(key => {
+      const limit = groupLimit(dateStr, key);
+      const cur = groupLeaveCount(dateStr, key);
+      const isCustom = dateLimits[dateStr] && dateLimits[dateStr][key] != null;
+      const full = cur >= limit;
+      return `<div class="tl-chip ${full ? 'full' : ''} ${isCustom ? 'custom' : ''}">${groupLabel(key)} ${cur}/${limit}${full ? ' 🚫' : ''}</div>`;
     }).join('');
 
     container.innerHTML += `
@@ -2126,47 +2141,38 @@ window.openTlModal = function(dateStr) {
 
 function renderTlModalBody() {
   const dateStr = tlModalDate;
-  const teams = getTeamNames();
+  const groups = limitGroups();
   const body = document.getElementById('tlModalBody');
-  if (!teams.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sub)">등록된 팀이 없습니다</div>'; return; }
-  body.innerHTML = teams.map(team => {
-    const limit = effectiveLeaveLimit(team, dateStr);
-    const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
-    let curInfo, over;
-    if (isFulltimeSplit(team)) {
-      const cf = teamLeaveCount(dateStr, team, '상근');
-      const cp = teamLeaveCount(dateStr, team, '주4일');
-      curInfo = `상근 ${cf}명 · 주4일 ${cp}명 (각각 제한 적용)`;
-      over = cf > limit || cp > limit;
-    } else {
-      const cur = teamLeaveCount(dateStr, team, null);
-      curInfo = `현재 신청 ${cur}명`;
-      over = cur > limit;
-    }
+  if (!groups.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sub)">등록된 팀이 없습니다</div>'; return; }
+  body.innerHTML = groups.map(key => {
+    const limit = groupLimit(dateStr, key);
+    const cur = groupLeaveCount(dateStr, key);
+    const isCustom = dateLimits[dateStr] && dateLimits[dateStr][key] != null;
+    const isPool = key.startsWith('pool_');
     return `
       <div class="tl-modal-row">
         <div>
-          <div class="tl-modal-team">${team}${isCustom ? '<span class="tl-custom-tag">커스텀</span>' : ''}${isFulltimeSplit(team) ? '<span class="tl-custom-tag" style="background:var(--primary-light);color:var(--primary)">상근분리</span>' : ''}</div>
-          <div class="tl-modal-cur">${curInfo}</div>
+          <div class="tl-modal-team">${groupLabel(key)}${isPool ? ' 풀' : ''}${isCustom ? '<span class="tl-custom-tag">커스텀</span>' : ''}</div>
+          <div class="tl-modal-cur">현재 신청 ${cur}명${isPool ? ' (풀 합산)' : ''}</div>
         </div>
         <div class="tl-stepper">
-          <button onclick="adjustDateLimit('${team}',-1)">−</button>
-          <span class="${over ? 'over' : ''}">${limit}</span>
-          <button onclick="adjustDateLimit('${team}',1)">+</button>
+          <button onclick="adjustDateLimit('${key}',-1)">−</button>
+          <span class="${cur > limit ? 'over' : ''}">${limit}</span>
+          <button onclick="adjustDateLimit('${key}',1)">+</button>
           <span class="tl-unit">명</span>
         </div>
       </div>`;
   }).join('');
 }
 
-// 특정 날짜+팀 제한 +1/-1 (커스텀으로 저장)
-window.adjustDateLimit = async function(team, delta) {
+// 특정 날짜+그룹 제한 +1/-1 (커스텀으로 저장)
+window.adjustDateLimit = async function(key, delta) {
   const dateStr = tlModalDate;
-  const base = effectiveLeaveLimit(team, dateStr);
+  const base = groupLimit(dateStr, key);
   let next = Math.max(0, base + delta);
   if (next > 20) next = 20;
   if (!dateLimits[dateStr]) dateLimits[dateStr] = {};
-  dateLimits[dateStr][team] = next;
+  dateLimits[dateStr][key] = next;
   try {
     await setDoc(doc(db, 'date_limits', dateStr), dateLimits[dateStr]);
   } catch {}
