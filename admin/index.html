@@ -1530,7 +1530,9 @@ window.selectLeaveStaff = function(staffId) {
               <button class="lh-action-btn" style="background:var(--accent-green-light);color:var(--accent-green);border:1.5px solid var(--accent-green)" onclick="openBonusModal('${staffId}')">🎁 포상 연차 추가</button>
               <button class="lh-action-btn" style="background:var(--accent-red-light);color:var(--accent-red);border:1.5px solid var(--accent-red)" onclick="openDeductModal('${staffId}')">➖ 연차 차감</button>
               <button class="lh-action-btn" style="background:var(--primary-light);color:var(--primary);border:1.5px solid var(--primary)" onclick="openSettleModal('${staffId}')">🧾 연차 정산</button>
-              ${remainP < 0 ? `<button class="lh-action-btn" style="background:var(--accent-red);color:#fff;border:1.5px solid var(--accent-red);font-weight:800" onclick="openSalaryDeductModal('${staffId}')">💸 마이너스 급여차감</button>` : ''}
+              ${remainP < 0
+                ? `<button class="lh-action-btn" style="background:var(--accent-red);color:#fff;border:1.5px solid var(--accent-red);font-weight:800" onclick="openSalaryDeductModal('${staffId}')">💸 급여차감 정산</button>`
+                : `<button class="lh-action-btn" style="background:#E5E7EB;color:#9CA3AF;border:1.5px solid var(--border);cursor:not-allowed" disabled title="잔여가 마이너스일 때만 가능합니다">💸 급여차감 정산</button>`}
             </div>` : ''}
           ${rows.length === 0
             ? `<div class="lv-empty">내역이 없습니다</div>`
