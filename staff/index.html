@@ -465,7 +465,7 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, getDocs, addDoc, query, where, orderBy, serverTimestamp }
+import { getFirestore, collection, getDocs, addDoc, query, where, orderBy, serverTimestamp, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -484,6 +484,7 @@ const db = getFirestore(app);
 let currentUser = null;
 let staffMap = {}, allStaff = [];
 let allRequests = [];          // 전체 직원 신청 (달력용)
+let unsubscribeRequests = null; // schedule_requests 실시간 구독 해제 함수
 let teamLimits = {};           // { '진료팀': { maxLeave:2, maxExtra:99, maxSwap:99 }, ... }
 let calYear, calMonth;
 let modalDate = '';
@@ -554,12 +555,14 @@ window.doLogin = async function() {
   document.getElementById('cardTeam').textContent = team;
 
   populateSwapTarget();
-  await Promise.all([loadAllRequests(), loadUserLeave(), loadTeamLimits()]);
-  renderCalendar();
-  loadHistory();
+  await loadTeamLimits();
+  // 실시간 구독 시작 (snapshot 수신 시 renderCalendar/loadHistory/loadUserLeave 자동 호출)
+  subscribeRequests();
 };
 
 window.doLogout = () => {
+  // 실시간 구독 해제
+  if (unsubscribeRequests) { unsubscribeRequests(); unsubscribeRequests = null; }
   currentUser = null;
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -614,17 +617,28 @@ function checkLimit(date, type) {
   }
   return { ok: true };
 }
-async function loadAllRequests() {
-  try {
-    const snap = await getDocs(query(collection(db, 'schedule_requests'), orderBy('createdAt','desc')));
+// ── 실시간 구독 (onSnapshot) ──
+function subscribeRequests() {
+  // 기존 구독이 있으면 먼저 해제
+  if (unsubscribeRequests) { unsubscribeRequests(); unsubscribeRequests = null; }
+  const q = query(collection(db, 'schedule_requests'), orderBy('createdAt','desc'));
+  unsubscribeRequests = onSnapshot(q, snap => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch {
+    // 변경 발생 시 화면 자동 갱신
+    renderCalendar();
+    loadHistory();
+    loadUserLeave();
+  }, err => {
+    console.error(err);
     allRequests = [
       {id:'r1',type:'leave',staffName:'김민지',staffTeam:'진료팀',date:today(),leaveSubType:'all',memo:'개인 사정',status:'pending'},
       {id:'r2',type:'extra',staffName:'이수연',staffTeam:'진료팀',date:today(),startTime:'18:00',endTime:'20:00',memo:'월말 정산',status:'approved'},
       {id:'r3',type:'swap',staffName:'오채원',staffTeam:'상담팀',date:today(),swapTarget:'신예린',memo:'개인 일정',status:'pending'},
     ];
-  }
+    renderCalendar();
+    loadHistory();
+    loadUserLeave();
+  });
 }
 
 // ── 연차 계산 ──

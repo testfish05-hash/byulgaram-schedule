@@ -894,14 +894,25 @@ function renderRequestCol(colId, reqs) {
       ? `${r.startTime}~${r.endTime}`
       : `↔ ${r.swapTarget}`;
 
-    const statusHtml = r.status === 'pending'
-      ? `<div class="req-actions">
+    let statusHtml;
+    if (r.status === 'pending') {
+      statusHtml = `<div class="req-actions">
           <button class="btn-approve" onclick="updateStatus('${r.id}','approved')">O 승인</button>
           <button class="btn-reject" onclick="updateStatus('${r.id}','rejected')">X 반려</button>
-        </div>`
-      : `<span class="status-badge ${r.status === 'approved' ? 'approved-badge' : 'rejected-badge'}">
-          ${r.status === 'approved' ? '✓ 승인' : '✕ 반려'}
-        </span>`;
+        </div>`;
+    } else if (r.status === 'approved') {
+      statusHtml = `<div class="req-actions" style="align-items:center">
+          <span class="status-badge approved-badge">✓ 승인</span>
+          <button class="btn-reject" onclick="updateStatus('${r.id}','rejected')">반려로 변경</button>
+          <button class="btn-edit" onclick="updateStatus('${r.id}','pending')">대기로 변경</button>
+        </div>`;
+    } else {
+      statusHtml = `<div class="req-actions" style="align-items:center">
+          <span class="status-badge rejected-badge">✕ 반려</span>
+          <button class="btn-approve" onclick="updateStatus('${r.id}','approved')">승인으로 변경</button>
+          <button class="btn-edit" onclick="updateStatus('${r.id}','pending')">대기로 변경</button>
+        </div>`;
+    }
 
     const typeIcon = r.type === 'leave' ? '🌴' : r.type === 'extra' ? '⏰' : '🔄';
     return `
@@ -1095,10 +1106,23 @@ window.selectLeaveStaff = function(staffId) {
                 : (r.leaveSubType === 'all' || !r.leaveSubType) ? `${fmtMin(minPerDay)}` : '-';
               const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
               const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
-              const actionHtml = r.status === 'pending'
-                ? `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
-                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`
-                : `<span class="lh-status ${stClass}">${stLabel}</span>`;
+              let actionHtml;
+              if (r.status === 'pending') {
+                actionHtml = `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
+                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`;
+              } else if (r.status === 'approved') {
+                actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                   <span class="lh-status ${stClass}">${stLabel}</span>
+                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">반려로 변경</button>
+                   <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+                 </div>`;
+              } else {
+                actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                   <span class="lh-status ${stClass}">${stLabel}</span>
+                   <button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">승인으로 변경</button>
+                   <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+                 </div>`;
+              }
               const deductStr = r.status === 'approved' ? fmtMin(deductMin) : '-';
               const remainStr = r.status === 'approved' ? fmtMin(runMin + deductMin) + ' → ' + fmtMin(runMin) : '-';
               const docChecked = r.docSubmitted ? '✅' : '☐';
