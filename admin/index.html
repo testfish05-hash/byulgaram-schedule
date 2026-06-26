@@ -1326,53 +1326,70 @@ function autoLeaveDays(years) {
   return 15 + Math.floor((years - 1) / 2);
 }
 
-function calcLeaveMinutes(staff) {
+// 종일/시간 연차 사용 분
+function leaveUsedMin(r, staff) {
+  if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+    const [sh,sm] = r.startTime.split(':').map(Number);
+    const [eh,em] = r.endTime.split(':').map(Number);
+    return (eh*60+em) - (sh*60+sm);
+  }
+  return (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
+}
+// 정렬·기간 배정용 기준일 (정산은 periodEnd 기준)
+function entryEffectiveDate(r) {
+  return (r.type === 'settlement') ? (r.periodEnd || r.date || '') : (r.date || '');
+}
+
+// ── 연차 단일 누적 원장 (요약/이력 테이블 공통) ──
+// 모든 항목(연차/포상/차감/급여차감/정산)을 날짜 오름차순으로 한 번만 누적 계산한다.
+function buildLeaveLedger(staff) {
   const join = staff.joinDate ? new Date(staff.joinDate) : new Date();
   const months = (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth());
   const years = Math.floor(months / 12);
-  const totalDays = autoLeaveDays(years); // initLeave 무시, 항상 자동 계산
   const minPerDay = getMinPerDay(staff);
-  const baseTotalMin = totalDays * minPerDay;
+  const baseTotalMin = autoLeaveDays(years) * minPerDay; // initLeave 무시, 항상 자동 계산
 
-  // 포상 연차 (총 보유 가산)
-  const bonusMin = allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'bonus' && r.status === 'approved')
-    .reduce((sum, r) => sum + (r.bonusMin || 0), 0);
-  const totalMin = baseTotalMin + bonusMin;
-
-  // 사용 연차
-  let usedMin = 0;
-  allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'leave' && r.status === 'approved')
-    .forEach(r => {
-      if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-        const [sh,sm] = r.startTime.split(':').map(Number);
-        const [eh,em] = r.endTime.split(':').map(Number);
-        usedMin += (eh*60+em) - (sh*60+sm);
-      } else {
-        usedMin += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-      }
+  const entries = allRequests
+    .filter(r => r.staffName === staff.name &&
+      (r.type === 'leave' || (['bonus','deduct','salary_deduct','settlement'].includes(r.type) && r.status === 'approved')))
+    .slice()
+    .sort((a, b) => {
+      // 날짜 오름차순, 같은 날이면 정산을 마지막에
+      const ka = entryEffectiveDate(a) + (a.type === 'settlement' ? '~1' : '~0');
+      const kb = entryEffectiveDate(b) + (b.type === 'settlement' ? '~1' : '~0');
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
 
-  // 차감(벌점)
-  const deductMin = allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'deduct' && r.status === 'approved')
-    .reduce((sum, r) => sum + (r.deductMin || 0), 0);
+  let run = baseTotalMin;
+  let bonusMin = 0, usedMin = 0, deductMin = 0, salaryDeductMin = 0, settlementMin = 0;
+  const runById = {};
+  entries.forEach(r => {
+    let delta = 0;
+    if (r.type === 'bonus') { delta = (r.bonusMin || 0); bonusMin += (r.bonusMin || 0); }
+    else if (r.type === 'deduct') { delta = -(r.deductMin || 0); deductMin += (r.deductMin || 0); }
+    else if (r.type === 'salary_deduct') { delta = (r.deductMin || 0); salaryDeductMin += (r.deductMin || 0); }
+    else if (r.type === 'settlement') { delta = -(r.settlementMin || 0); settlementMin += (r.settlementMin || 0); }
+    else if (r.status === 'approved') { const dm = leaveUsedMin(r, staff); delta = -dm; usedMin += dm; }
+    run += delta;
+    runById[r.id] = run;
+  });
 
-  // 정산: settlementMin(양수=잔여 줄임, 음수=잔여 늘림)을 usedMin에 합산
-  const settlementMin = allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
-    .reduce((sum, r) => sum + (r.settlementMin || 0), 0);
-  usedMin += settlementMin;
+  return {
+    entries, runById,
+    baseTotalMin, bonusMin, usedMin, deductMin, salaryDeductMin, settlementMin,
+    totalMin: baseTotalMin + bonusMin, remainMin: run, minPerDay, years
+  };
+}
 
-  // 마이너스 급여차감: deductMin(양수 절댓값)을 usedMin에서 빼서 마이너스 잔여를 0으로 복구
-  const salaryDeductMin = allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'salary_deduct' && r.status === 'approved')
-    .reduce((sum, r) => sum + (r.deductMin || 0), 0);
-  usedMin -= salaryDeductMin;
-
-  const remainMin = totalMin - usedMin - deductMin;
-  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, settlementMin, salaryDeductMin, remainMin, totalDays, years, minPerDay };
+// 요약 카드/목록용 — 원장과 동일한 결과 반환
+function calcLeaveMinutes(staff) {
+  const L = buildLeaveLedger(staff);
+  return {
+    baseTotalMin: L.baseTotalMin, bonusMin: L.bonusMin, totalMin: L.totalMin,
+    usedMin: L.usedMin, deductMin: L.deductMin, settlementMin: L.settlementMin,
+    salaryDeductMin: L.salaryDeductMin, remainMin: L.remainMin,
+    totalDays: autoLeaveDays(L.years), years: L.years, minPerDay: L.minPerDay
+  };
 }
 
 // 분 → "Xh Ym" 문자열
@@ -1421,15 +1438,14 @@ function renderLeaveTable() {  // 이름 유지 (호출부 호환)
   }).join('');
 }
 
-// 내역 테이블 행 렌더 (기간별 공용). startMin부터 누적 잔여 계산
-function ledgerRowsHtml(staff, staffId, rows, startMin) {
-  let runMin = startMin;
+// 내역 테이블 행 렌더 (기간별 공용). 잔여는 공통 원장(L.runById)의 연속 누적값 사용
+function ledgerRowsHtml(staff, staffId, rows, L) {
   return rows.map((r, i) => {
     let typeLabel, typeCls, amtCell, remainCell, actionHtml, docCell;
+    const runMin = L.runById[r.id]; // 공통 원장의 누적 잔여 (연속)
 
     if (r.type === 'bonus') {
       const amt = r.bonusMin || 0;
-      runMin += amt;
       typeLabel = '🎁 포상'; typeCls = 'lh-bonus';
       amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
       remainCell = fmtMinSigned(runMin);
@@ -1437,7 +1453,6 @@ function ledgerRowsHtml(staff, staffId, rows, startMin) {
       docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
     } else if (r.type === 'deduct') {
       const amt = r.deductMin || 0;
-      runMin -= amt;
       typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
       amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
       remainCell = fmtMinSigned(runMin);
@@ -1445,7 +1460,6 @@ function ledgerRowsHtml(staff, staffId, rows, startMin) {
       docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
     } else if (r.type === 'salary_deduct') {
       const amt = r.deductMin || 0; // 양수, 마이너스 잔여 복구
-      runMin += amt;
       typeLabel = '💸 급여차감'; typeCls = 'lh-salary';
       amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
       remainCell = fmtMinSigned(runMin);
@@ -1453,7 +1467,6 @@ function ledgerRowsHtml(staff, staffId, rows, startMin) {
       docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
     } else if (r.type === 'settlement') {
       const sm = r.settlementMin || 0;
-      runMin -= sm;
       typeLabel = '🧾 정산'; typeCls = 'lh-settle';
       amtCell = sm >= 0
         ? `<span style="color:var(--text-sub);font-weight:700">-${fmtMin(sm)}</span>`
@@ -1463,17 +1476,7 @@ function ledgerRowsHtml(staff, staffId, rows, startMin) {
       docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
     } else {
       // 연차 신청
-      let dm = 0;
-      if (r.status === 'approved') {
-        if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-          const [sh,sm] = r.startTime.split(':').map(Number);
-          const [eh,em] = r.endTime.split(':').map(Number);
-          dm = (eh*60+em) - (sh*60+sm);
-        } else {
-          dm = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-        }
-        runMin -= dm;
-      }
+      const dm = (r.status === 'approved') ? leaveUsedMin(r, staff) : 0;
       typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
       typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
       amtCell = r.status === 'approved' ? `<span style="color:var(--accent-orange);font-weight:700">-${fmtMin(dm)}</span>` : '-';
@@ -1529,6 +1532,8 @@ window.selectLeaveStaff = function(staffId) {
   const staff = allStaff.find(s => s.id === staffId);
   if (!staff) return;
 
+  // 공통 원장 (요약 카드 + 이력 테이블 모두 이 결과 사용 → 잔여 일치 보장)
+  const L = buildLeaveLedger(staff);
   const { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, years, minPerDay } = calcLeaveMinutes(staff);
 
   const remainColor = remainMin < minPerDay * 3 ? 'var(--accent-red)' : 'var(--accent-green)';
@@ -1554,39 +1559,33 @@ window.selectLeaveStaff = function(staffId) {
   const curEnd = addDays(addYears(curStart, 1), -1);
   periods.push({ start: curStart, end: curEnd, settlement: null, isCurrent: true, isFirst: settlements.length === 0 });
 
-  // 각 기간 아코디언 HTML (최신 기간이 위로)
-  const periodsHtml = periods.map((p, idx) => {
-    // 기간 내 항목 (정산 doc 제외, 날짜 범위 [start, end] 포함 / 현재기는 [start, ~])
-    const entries = allRequests
-      .filter(r => r.staffName === staff.name &&
-        (r.type === 'leave' || (['bonus','deduct','salary_deduct'].includes(r.type) && r.status === 'approved')) &&
-        r.date && r.date >= p.start && (p.isCurrent ? true : r.date <= p.end))
-      .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
-
-    // 기간 요약
+  // 공통 원장 항목을 기준일로 각 기간에 배정 (정산은 periodEnd 기준 → 해당 기간 마지막)
+  let prevRun = L.baseTotalMin;
+  const periodData = periods.map((p, idx) => {
+    const rows = L.entries.filter(r => {
+      const d = entryEffectiveDate(r);
+      return d && d >= p.start && (p.isCurrent ? true : d <= p.end);
+    });
+    // 기간 요약 (표시용)
     let bonusP = 0, usedP = 0, deductP = 0, salaryP = 0;
-    entries.forEach(r => {
+    rows.forEach(r => {
       if (r.type === 'bonus') bonusP += (r.bonusMin || 0);
       else if (r.type === 'deduct') deductP += (r.deductMin || 0);
       else if (r.type === 'salary_deduct') salaryP += (r.deductMin || 0);
-      else if (r.type === 'leave' && r.status === 'approved') {
-        if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-          const [sh,sm] = r.startTime.split(':').map(Number);
-          const [eh,em] = r.endTime.split(':').map(Number);
-          usedP += (eh*60+em) - (sh*60+sm);
-        } else {
-          usedP += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-        }
-      }
+      else if (r.type === 'leave' && r.status === 'approved') usedP += leaveUsedMin(r, staff);
     });
-    const baseP = p.isFirst ? baseTotalMin : 0;
+    const baseP = p.isFirst ? L.baseTotalMin : 0;
     const totalP = baseP + bonusP;
-    // 정산완료 기간은 0, 그 외(현재/미정산)는 실제 잔여
-    const remainP = p.settlement ? 0 : (totalP - usedP - deductP + salaryP);
+    // 기간 잔여 = 공통 원장의 마지막 행 누적값 (비어있으면 직전 기간 잔여 이어받음)
+    const remainP = rows.length ? L.runById[rows[rows.length - 1].id] : prevRun;
+    prevRun = remainP;
+    return { p, idx, rows, totalP, usedP, deductP, remainP };
+  });
 
-    // 행: 기간 항목 + (정산 완료 기간이면 정산 row를 마지막에)
-    const rows = p.settlement ? [...entries, p.settlement] : entries;
-    const tbody = ledgerRowsHtml(staff, staffId, rows, baseP);
+  // 각 기간 아코디언 HTML (최신 기간이 위로)
+  const periodsHtml = periodData.map(pd => {
+    const { p, idx, rows, totalP, usedP, deductP, remainP } = pd;
+    const tbody = ledgerRowsHtml(staff, staffId, rows, L);
 
     const badge = p.isCurrent
       ? `<span class="lv-period-badge cur">진행중</span>`
