@@ -1106,7 +1106,15 @@ window.updateStatus = async function(reqId, status) {
 // ─── 연차 현황 ───
 // ─── 연차 계산 (분 단위) ───
 function getMinPerDay(staff) {
-  return (staff.type === '주4일') ? 444 : 480; // 주4일=7h24m, 상근=8h
+  return (staff.type === '주4일') ? 444 : 480; // 보유연차 총시간 계산용: 주4일=7h24m, 상근=8h
+}
+
+// ── 종일연차 차감 시간 (근무유형 + 요일) ──
+// 상근: 480분 고정 / 주4일: 월·화·목·금=630분, 수·토·일=480분
+function getDeductMin(dateStr, workType) {
+  if (workType !== '주4일') return 480;
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  return [0,3,6].includes(dow) ? 480 : 630;
 }
 
 function calcLeaveMinutes(staff) {
@@ -1126,7 +1134,7 @@ function calcLeaveMinutes(staff) {
       const [eh,em] = r.endTime.split(':').map(Number);
       usedMin += (eh*60+em) - (sh*60+sm);
     } else {
-      usedMin += (r.leaveAmount || 1) * minPerDay;
+      usedMin += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
     }
   });
   return { totalMin, usedMin, remainMin: totalMin - usedMin, totalDays, minPerDay };
@@ -1255,7 +1263,7 @@ window.selectLeaveStaff = function(staffId) {
                   const [eh,em] = r.endTime.split(':').map(Number);
                   deductMin = (eh*60+em) - (sh*60+sm);
                 } else {
-                  deductMin = (r.leaveAmount || 1) * minPerDay;
+                  deductMin = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
                 }
                 runMin -= deductMin;
               }
@@ -1263,7 +1271,7 @@ window.selectLeaveStaff = function(staffId) {
               const typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
               const timeStr = r.leaveSubType === 'hour' && r.startTime
                 ? `${r.startTime}~${r.endTime||''}`
-                : (r.leaveSubType === 'all' || !r.leaveSubType) ? `${fmtMin(minPerDay)}` : '-';
+                : (r.leaveSubType === 'all' || !r.leaveSubType) ? `${fmtMin(getDeductMin(r.date, staff.type))}` : '-';
               const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
               const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
               let actionHtml;

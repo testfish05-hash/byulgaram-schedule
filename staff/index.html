@@ -654,6 +654,14 @@ function subscribeRequests() {
   });
 }
 
+// ── 종일연차 차감 시간 (근무유형 + 요일) ──
+// 상근: 480분 고정 / 주4일: 월·화·목·금=630분, 수·토·일=480분
+function getDeductMin(dateStr, workType) {
+  if (workType !== '주4일') return 480;
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  return [0,3,6].includes(dow) ? 480 : 630;
+}
+
 // ── 연차 계산 ──
 async function loadUserLeave() {
   if (!currentUser) return;
@@ -672,7 +680,7 @@ async function loadUserLeave() {
         const [sh,sm] = r.startTime.split(':').map(Number);
         const [eh,em] = r.endTime.split(':').map(Number);
         usedMin += (eh*60+em)-(sh*60+sm);
-      } else { usedMin += (r.leaveAmount||1)*mpd; }
+      } else { usedMin += (r.leaveAmount||1)*getDeductMin(r.date, currentUser.type); }
     });
   } catch {}
 
