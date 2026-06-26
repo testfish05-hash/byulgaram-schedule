@@ -545,6 +545,19 @@
   }
   .st-add-row td { background: var(--primary-light); }
   .st-empty-row td { text-align: center; color: var(--text-sub); padding: 20px; font-size: 13px; }
+
+  /* ── 포상/차감 모달 필드 ── */
+  .lv-adj-field { margin-bottom: 14px; }
+  .lv-adj-field > label { display: block; font-size: 12px; font-weight: 700; color: var(--text-sub); margin-bottom: 6px; }
+  .lv-adj-field input, .lv-adj-field select, .lv-adj-field textarea {
+    width: 100%; padding: 9px 11px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .lv-adj-field textarea { height: 60px; resize: vertical; }
+  .lv-adj-field input:focus, .lv-adj-field select:focus, .lv-adj-field textarea:focus { outline: none; border-color: var(--primary); }
+  /* 내역 테이블 포상/차감 배지 */
+  .lh-bonus { background: var(--accent-green-light); color: var(--accent-green); }
+  .lh-deduct { background: var(--accent-red-light); color: var(--accent-red); }
 </style>
 </head>
 <body>
@@ -742,6 +755,42 @@
         <div class="tl-modal-footer">
           <button class="btn-edit" onclick="resetTlDate()">↺ 기본값으로 초기화</button>
           <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="closeTlModalForce()">완료</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 포상/차감 모달 -->
+    <div id="lvAdjModal" class="tl-modal-overlay hidden" onclick="closeLvAdjModal(event)">
+      <div class="tl-modal">
+        <div class="tl-modal-header">
+          <div class="tl-modal-title" id="lvAdjTitle">포상 연차 추가</div>
+          <button class="tl-modal-x" onclick="closeLvAdjModalForce()">✕</button>
+        </div>
+        <div class="tl-modal-body">
+          <div class="lv-adj-field">
+            <label>날짜</label>
+            <input type="date" id="lvAdjDate">
+          </div>
+          <div class="lv-adj-field" id="lvAdjTypeRow">
+            <label>유형</label>
+            <select id="lvAdjType" onchange="onLvAdjTypeChange()">
+              <option value="all">종일</option>
+              <option value="half">반차</option>
+              <option value="custom">시간 직접입력</option>
+            </select>
+          </div>
+          <div class="lv-adj-field" id="lvAdjMinRow">
+            <label id="lvAdjMinLabel">시간 (분)</label>
+            <input type="number" id="lvAdjMin" min="0" placeholder="분 단위로 입력">
+          </div>
+          <div class="lv-adj-field">
+            <label>메모</label>
+            <textarea id="lvAdjMemo" placeholder="사유를 입력하세요"></textarea>
+          </div>
+        </div>
+        <div class="tl-modal-footer">
+          <button class="btn-edit" onclick="closeLvAdjModalForce()">취소</button>
+          <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="submitLvAdj()">저장</button>
         </div>
       </div>
     </div>
@@ -952,12 +1001,14 @@ window.showPage = function(page) {
 
 // ─── 통계 ───
 function updateStats() {
-  const pending = allRequests.filter(r => r.status === 'pending').length;
+  // 포상/차감은 근무 신청 통계에서 제외
+  const reqs = allRequests.filter(r => r.type !== 'bonus' && r.type !== 'deduct');
+  const pending = reqs.filter(r => r.status === 'pending').length;
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
   const todayStr = now.toISOString().slice(0,10);
-  const approvedToday = allRequests.filter(r => r.status === 'approved' && r.date === todayStr).length;
-  const totalMonth = allRequests.filter(r => {
+  const approvedToday = reqs.filter(r => r.status === 'approved' && r.date === todayStr).length;
+  const totalMonth = reqs.filter(r => {
     const d = r.date;
     return d && d.startsWith(`${thisYear}-${String(thisMonth+1).padStart(2,'0')}`);
   }).length;
@@ -998,7 +1049,7 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayOfWeek = new Date(calYear, calMonth, d).getDay();
-    const dayReqs = allRequests.filter(r => r.date === dateStr);
+    const dayReqs = allRequests.filter(r => r.date === dateStr && r.type !== 'bonus' && r.type !== 'deduct');
 
     const isSun = dayOfWeek === 0, isSat = dayOfWeek === 6;
     const isToday = dateStr === todayStr;
@@ -1117,27 +1168,49 @@ function getDeductMin(dateStr, workType) {
   return [0,3,6].includes(dow) ? 480 : 630;
 }
 
+// 근무년수 기준 자동 연차 일수
+//  1년 미만: 11개 / 1~2년: 15개 / 2년 이상: 15 + floor((년수-1)/2)
+function autoLeaveDays(years) {
+  if (years < 1) return 11;
+  if (years < 2) return 15;
+  return 15 + Math.floor((years - 1) / 2);
+}
+
 function calcLeaveMinutes(staff) {
   const join = staff.joinDate ? new Date(staff.joinDate) : new Date();
   const months = (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth());
-  const totalDays = staff.initLeave != null ? staff.initLeave : (months < 12 ? 11 : 15);
+  const years = Math.floor(months / 12);
+  const totalDays = autoLeaveDays(years); // initLeave 무시, 항상 자동 계산
   const minPerDay = getMinPerDay(staff);
-  const totalMin = totalDays * minPerDay;
+  const baseTotalMin = totalDays * minPerDay;
 
-  const leaveReqs = allRequests.filter(r =>
-    r.staffName === staff.name && r.type === 'leave' && r.status === 'approved'
-  );
+  // 포상 연차 (총 보유 가산)
+  const bonusMin = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'bonus' && r.status === 'approved')
+    .reduce((sum, r) => sum + (r.bonusMin || 0), 0);
+  const totalMin = baseTotalMin + bonusMin;
+
+  // 사용 연차
   let usedMin = 0;
-  leaveReqs.forEach(r => {
-    if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-      const [sh,sm] = r.startTime.split(':').map(Number);
-      const [eh,em] = r.endTime.split(':').map(Number);
-      usedMin += (eh*60+em) - (sh*60+sm);
-    } else {
-      usedMin += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-    }
-  });
-  return { totalMin, usedMin, remainMin: totalMin - usedMin, totalDays, minPerDay };
+  allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'leave' && r.status === 'approved')
+    .forEach(r => {
+      if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+        const [sh,sm] = r.startTime.split(':').map(Number);
+        const [eh,em] = r.endTime.split(':').map(Number);
+        usedMin += (eh*60+em) - (sh*60+sm);
+      } else {
+        usedMin += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
+      }
+    });
+
+  // 차감(벌점)
+  const deductMin = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'deduct' && r.status === 'approved')
+    .reduce((sum, r) => sum + (r.deductMin || 0), 0);
+
+  const remainMin = totalMin - usedMin - deductMin;
+  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, totalDays, years, minPerDay };
 }
 
 // 분 → "Xh Ym" 문자열
@@ -1145,6 +1218,13 @@ function fmtMin(mins) {
   if (mins <= 0) return '0h';
   const h = Math.floor(mins / 60), m = mins % 60;
   return h + 'h' + (m ? ' ' + m + 'm' : '');
+}
+// 분 → 부호 포함 "±Xh Ym" (음수 잔여 표시용)
+function fmtMinSigned(mins) {
+  if (mins === 0) return '0h';
+  const neg = mins < 0, a = Math.abs(mins);
+  const h = Math.floor(a / 60), m = a % 60;
+  return (neg ? '-' : '') + h + 'h' + (m ? ' ' + m + 'm' : '');
 }
 // 분 → "(N개 Xh Ym)" 문자열
 function fmtDayCount(mins, minPerDay) {
@@ -1174,7 +1254,7 @@ function renderLeaveTable() {  // 이름 유지 (호출부 호환)
           <div class="lv-staff-name">${s.name}</div>
           <div class="lv-staff-meta">${s.team} · ${s.type||'상근'}</div>
         </div>
-        <span class="lv-staff-remain ${isLow ? 'remain-low' : 'remain-ok'}">${fmtMin(remainMin)}</span>
+        <span class="lv-staff-remain ${isLow ? 'remain-low' : 'remain-ok'}">${fmtMinSigned(remainMin)}</span>
       </div>`;
   }).join('');
 }
@@ -1191,20 +1271,19 @@ window.selectLeaveStaff = function(staffId) {
   const staff = allStaff.find(s => s.id === staffId);
   if (!staff) return;
 
-  const { totalMin, usedMin, remainMin, totalDays, minPerDay } = calcLeaveMinutes(staff);
+  const { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, years, minPerDay } = calcLeaveMinutes(staff);
 
-  // 이 직원의 연차 신청 이력 (날짜 오름차순)
-  const leaveReqs = allRequests
-    .filter(r => r.staffName === staff.name && r.type === 'leave')
+  // 통합 내역: 연차 신청 + 포상 + 차감 (날짜 오름차순)
+  const ledger = allRequests
+    .filter(r => r.staffName === staff.name &&
+      (r.type === 'leave' || ((r.type === 'bonus' || r.type === 'deduct') && r.status === 'approved')))
     .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
 
-  // 누적 잔여 계산용
-  let runMin = totalMin;
+  // 누적 잔여: 기본 보유에서 시작 (포상 가산 / 사용·차감 감산)
+  let runMin = baseTotalMin;
 
-  // 입사일 기준 총 연차 개수/시간 표시
-  const join = staff.joinDate ? new Date(staff.joinDate) : new Date();
-  const months = (now.getFullYear() - join.getFullYear())*12 + (now.getMonth()-join.getMonth());
-  const yrs = Math.floor(months/12);
+  const remainColor = remainMin < minPerDay * 3 ? 'var(--accent-red)' : 'var(--accent-green)';
+  const safeMemo = (staff.memo || '').replace(/</g, '&lt;');
 
   const detail = document.getElementById('lvDetail');
   detail.innerHTML = `
@@ -1213,12 +1292,12 @@ window.selectLeaveStaff = function(staffId) {
       <div class="lv-summary-card">
         <div class="lv-sum-label">👤 직원</div>
         <div class="lv-sum-val" style="font-size:17px">${staff.name}</div>
-        <div class="lv-sum-sub">${staff.team} · ${staff.type||'상근'} · 입사 ${yrs}년</div>
+        <div class="lv-sum-sub">${staff.team} · ${staff.type||'상근'} · 입사 ${years}년</div>
       </div>
       <div class="lv-summary-card">
         <div class="lv-sum-label">📋 총 보유 연차</div>
         <div class="lv-sum-val" style="color:var(--primary)">${fmtMin(totalMin)}</div>
-        <div class="lv-sum-sub">${fmtDayCount(totalMin, minPerDay)} · 1일=${fmtMin(minPerDay)}</div>
+        <div class="lv-sum-sub">기본 ${fmtMin(baseTotalMin)}${bonusMin ? ' + 포상 ' + fmtMin(bonusMin) : ''} · 1일=${fmtMin(minPerDay)}</div>
       </div>
       <div class="lv-summary-card">
         <div class="lv-sum-label">✅ 사용</div>
@@ -1227,83 +1306,121 @@ window.selectLeaveStaff = function(staffId) {
       </div>
       <div class="lv-summary-card">
         <div class="lv-sum-label">🌴 잔여</div>
-        <div class="lv-sum-val" style="color:${remainMin < minPerDay*3 ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMin(remainMin)}</div>
-        <div class="lv-sum-sub">${fmtDayCount(remainMin, minPerDay)}</div>
+        <div class="lv-sum-val" style="color:${remainColor}">${fmtMinSigned(remainMin)}</div>
+        <div class="lv-sum-sub">${remainMin < 0 ? '초과 사용' : fmtDayCount(remainMin, minPerDay)}</div>
       </div>
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">🎁 포상 연차</div>
+        <div class="lv-sum-val" style="color:var(--accent-green)">${bonusMin ? '+' + fmtMin(bonusMin) : '0h'}</div>
+        <div class="lv-sum-sub">총 보유에 가산</div>
+      </div>
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">➖ 차감(벌점)</div>
+        <div class="lv-sum-val" style="color:var(--accent-red)">${deductMin ? '-' + fmtMin(deductMin) : '0h'}</div>
+        <div class="lv-sum-sub">잔여에서 차감</div>
+      </div>
+    </div>
+
+    <!-- 특이사항 메모 -->
+    <div class="lv-summary-card">
+      <div class="lv-sum-label">📝 특이사항 메모 <span style="font-weight:400;color:var(--text-sub)">· 자동 저장</span></div>
+      <textarea id="lvStaffMemo" oninput="onStaffMemoInput('${staffId}', this.value)" placeholder="이 직원의 특이사항을 입력하세요 (입력 후 자동 저장)"
+        style="width:100%;height:58px;margin-top:8px;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical">${safeMemo}</textarea>
     </div>
 
     <!-- 이력 테이블 -->
     <div class="lv-history-card">
       <div class="lv-history-header">
-        <div class="lv-history-title">📅 연차 신청 이력</div>
-        <div style="font-size:12px;color:var(--text-sub)">총 ${leaveReqs.length}건</div>
+        <div class="lv-history-title">📅 연차 내역 (신청·포상·차감)</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text-sub)">총 ${ledger.length}건</span>
+          <button class="lh-action-btn" style="background:var(--accent-green-light);color:var(--accent-green);border:1.5px solid var(--accent-green)" onclick="openBonusModal('${staffId}')">🎁 포상 연차 추가</button>
+          <button class="lh-action-btn" style="background:var(--accent-red-light);color:var(--accent-red);border:1.5px solid var(--accent-red)" onclick="openDeductModal('${staffId}')">➖ 연차 차감</button>
+        </div>
       </div>
-      ${leaveReqs.length === 0
-        ? `<div class="lv-empty">연차 신청 이력이 없습니다</div>`
+      ${ledger.length === 0
+        ? `<div class="lv-empty">내역이 없습니다</div>`
         : `<div style="overflow-x:auto">
         <table class="lv-history-table">
           <thead>
             <tr>
               <th style="width:36px">#</th>
-              <th>휴가희망일</th>
+              <th>날짜</th>
               <th>유형</th>
-              <th>차감시간</th>
+              <th>차감/가산</th>
               <th>잔여시간</th>
               <th>메모</th>
-              <th>연차신청서 작성</th>
-              <th>승인</th>
+              <th>연차신청서</th>
+              <th>관리</th>
             </tr>
           </thead>
           <tbody>
-            ${leaveReqs.map((r, i) => {
-              let deductMin = 0;
-              if (r.status === 'approved') {
-                if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-                  const [sh,sm] = r.startTime.split(':').map(Number);
-                  const [eh,em] = r.endTime.split(':').map(Number);
-                  deductMin = (eh*60+em) - (sh*60+sm);
-                } else {
-                  deductMin = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-                }
-                runMin -= deductMin;
-              }
-              const typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
-              const typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
-              const timeStr = r.leaveSubType === 'hour' && r.startTime
-                ? `${r.startTime}~${r.endTime||''}`
-                : (r.leaveSubType === 'all' || !r.leaveSubType) ? `${fmtMin(getDeductMin(r.date, staff.type))}` : '-';
-              const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
-              const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
-              let actionHtml;
-              if (r.status === 'pending') {
-                actionHtml = `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
-                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`;
-              } else if (r.status === 'approved') {
-                actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                   <span class="lh-status ${stClass}">${stLabel}</span>
-                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">반려로 변경</button>
-                   <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
-                 </div>`;
+            ${ledger.map((r, i) => {
+              let typeLabel, typeCls, amtCell, remainCell, actionHtml, docCell;
+
+              if (r.type === 'bonus') {
+                const amt = r.bonusMin || 0;
+                runMin += amt;
+                typeLabel = '🎁 포상'; typeCls = 'lh-bonus';
+                amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
+                remainCell = fmtMinSigned(runMin);
+                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+              } else if (r.type === 'deduct') {
+                const amt = r.deductMin || 0;
+                runMin -= amt;
+                typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
+                amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
+                remainCell = fmtMinSigned(runMin);
+                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
               } else {
-                actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                   <span class="lh-status ${stClass}">${stLabel}</span>
-                   <button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">승인으로 변경</button>
-                   <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
-                 </div>`;
+                // 연차 신청
+                let dm = 0;
+                if (r.status === 'approved') {
+                  if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+                    const [sh,sm] = r.startTime.split(':').map(Number);
+                    const [eh,em] = r.endTime.split(':').map(Number);
+                    dm = (eh*60+em) - (sh*60+sm);
+                  } else {
+                    dm = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
+                  }
+                  runMin -= dm;
+                }
+                typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
+                typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
+                amtCell = r.status === 'approved' ? `<span style="color:var(--accent-orange);font-weight:700">-${fmtMin(dm)}</span>` : '-';
+                remainCell = r.status === 'approved' ? fmtMinSigned(runMin) : '-';
+                const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
+                const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
+                if (r.status === 'pending') {
+                  actionHtml = `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
+                     <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`;
+                } else if (r.status === 'approved') {
+                  actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                     <span class="lh-status ${stClass}">${stLabel}</span>
+                     <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">반려로 변경</button>
+                     <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+                   </div>`;
+                } else {
+                  actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                     <span class="lh-status ${stClass}">${stLabel}</span>
+                     <button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">승인으로 변경</button>
+                     <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+                   </div>`;
+                }
+                docCell = `<td style="text-align:center;font-size:16px;cursor:pointer" onclick="toggleDoc('${r.id}','${staffId}')" title="클릭하여 작성여부 토글">${r.docSubmitted ? '✅' : '☐'}</td>`;
               }
-              const deductStr = r.status === 'approved' ? fmtMin(deductMin) : '-';
-              const remainStr = r.status === 'approved' ? fmtMin(runMin + deductMin) + ' → ' + fmtMin(runMin) : '-';
-              const docChecked = r.docSubmitted ? '✅' : '☐';
 
               return `
                 <tr>
                   <td style="color:var(--text-sub);font-size:11px">${i+1}</td>
                   <td style="font-weight:700;white-space:nowrap">${r.date || '-'}</td>
                   <td><span class="lh-type-badge ${typeCls}">${typeLabel}</span></td>
-                  <td style="font-weight:700;color:var(--accent-orange)">${deductStr}</td>
-                  <td style="font-size:12px;color:var(--text-sub)">${remainStr}</td>
+                  <td style="font-weight:700">${amtCell}</td>
+                  <td style="font-size:12px;color:var(--text-sub)">${remainCell}</td>
                   <td style="font-size:12px;color:var(--text-sub);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.memo||'-'}</td>
-                  <td style="text-align:center;font-size:16px;cursor:pointer" onclick="toggleDoc('${r.id}','${staffId}')" title="클릭하여 작성여부 토글">${docChecked}</td>
+                  ${docCell}
                   <td>${actionHtml}</td>
                 </tr>`;
             }).join('')}
@@ -1336,6 +1453,111 @@ window.toggleDoc = async function(reqId, staffId) {
     await updateDoc(doc(db, 'schedule_requests', reqId), { docSubmitted: req.docSubmitted });
   } catch(e) {}
   selectLeaveStaff(staffId);
+};
+
+// ─── 직원 특이사항 메모 (1초 debounce 자동 저장) ───
+let staffMemoTimer = null;
+window.onStaffMemoInput = function(staffId, val) {
+  clearTimeout(staffMemoTimer);
+  staffMemoTimer = setTimeout(async () => {
+    const staff = allStaff.find(s => s.id === staffId);
+    if (staff) staff.memo = val;
+    try { await updateDoc(doc(db, 'staff_list', staffId), { memo: val }); } catch(e) {}
+    showToast('💾 메모 저장됨');
+  }, 1000);
+};
+
+// ─── 포상/차감 모달 ───
+let lvAdjMode = 'bonus', lvAdjStaffId = null;
+
+window.openBonusModal = function(staffId) {
+  lvAdjMode = 'bonus'; lvAdjStaffId = staffId;
+  document.getElementById('lvAdjTitle').textContent = '🎁 포상 연차 추가';
+  document.getElementById('lvAdjTypeRow').style.display = '';
+  document.getElementById('lvAdjType').value = 'all';
+  document.getElementById('lvAdjMinRow').style.display = 'none';
+  document.getElementById('lvAdjMinLabel').textContent = '시간 (분)';
+  document.getElementById('lvAdjDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('lvAdjMin').value = '';
+  document.getElementById('lvAdjMemo').value = '';
+  document.getElementById('lvAdjModal').classList.remove('hidden');
+};
+
+window.openDeductModal = function(staffId) {
+  lvAdjMode = 'deduct'; lvAdjStaffId = staffId;
+  document.getElementById('lvAdjTitle').textContent = '➖ 연차 차감';
+  document.getElementById('lvAdjTypeRow').style.display = 'none';
+  document.getElementById('lvAdjMinRow').style.display = '';
+  document.getElementById('lvAdjMinLabel').textContent = '차감 시간 (분)';
+  document.getElementById('lvAdjDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('lvAdjMin').value = '';
+  document.getElementById('lvAdjMemo').value = '';
+  document.getElementById('lvAdjModal').classList.remove('hidden');
+};
+
+// 포상 유형 변경 시 분 입력 표시 토글 (시간 직접입력만 노출)
+window.onLvAdjTypeChange = function() {
+  const t = document.getElementById('lvAdjType').value;
+  document.getElementById('lvAdjMinRow').style.display = (t === 'custom') ? '' : 'none';
+};
+
+window.closeLvAdjModal = function(e) {
+  if (e.target === document.getElementById('lvAdjModal')) closeLvAdjModalForce();
+};
+window.closeLvAdjModalForce = function() {
+  document.getElementById('lvAdjModal').classList.add('hidden');
+};
+
+window.submitLvAdj = async function() {
+  const staffId = lvAdjStaffId;
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+  const date = document.getElementById('lvAdjDate').value;
+  if (!date) { showToast('날짜를 선택하세요'); return; }
+  const memo = document.getElementById('lvAdjMemo').value.trim();
+
+  let data;
+  if (lvAdjMode === 'bonus') {
+    const subType = document.getElementById('lvAdjType').value;
+    let amt;
+    if (subType === 'all') amt = getDeductMin(date, staff.type);
+    else if (subType === 'half') amt = Math.round(getDeductMin(date, staff.type) / 2);
+    else amt = parseInt(document.getElementById('lvAdjMin').value) || 0;
+    if (amt <= 0) { showToast('시간을 올바르게 입력하세요'); return; }
+    // bonusMin(양수)로 합산. leaveAmount는 음수로 보관(차감 아닌 가산 의미)
+    data = { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+             bonusMin: amt, leaveAmount: -amt, leaveSubType: subType, memo, createdAt: serverTimestamp() };
+  } else {
+    const amt = parseInt(document.getElementById('lvAdjMin').value) || 0;
+    if (amt <= 0) { showToast('차감 시간을 입력하세요'); return; }
+    data = { type:'deduct', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+             deductMin: amt, memo, createdAt: serverTimestamp() };
+  }
+
+  try {
+    const ref = await addDoc(collection(db, 'schedule_requests'), data);
+    data.id = ref.id;
+  } catch(e) {
+    data.id = (lvAdjMode === 'bonus' ? 'b' : 'd') + Date.now();
+  }
+  allRequests.push({ ...data, createdAt: null });
+  closeLvAdjModalForce();
+  renderLeaveTable();
+  selectLeaveStaff(staffId);
+  updateStats();
+  showToast(lvAdjMode === 'bonus' ? '🎁 포상 연차가 추가되었습니다' : '➖ 연차가 차감되었습니다');
+};
+
+// 포상/차감 항목 삭제
+window.deleteAdjReq = async function(reqId, staffId) {
+  if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+  try { await deleteDoc(doc(db, 'schedule_requests', reqId)); } catch(e) {}
+  const idx = allRequests.findIndex(r => r.id === reqId);
+  if (idx >= 0) allRequests.splice(idx, 1);
+  renderLeaveTable();
+  selectLeaveStaff(staffId);
+  updateStats();
+  showToast('🗑 삭제되었습니다');
 };
 
 // ─── 팀 인원 제한 ───
@@ -1705,7 +1927,7 @@ function staffRowHtml(s) {
       <td>${s.type || '상근'}</td>
       <td>${s.joinDate || '-'}</td>
       <td>${s.initLeave != null ? s.initLeave + '일' : '-'}</td>
-      <td style="font-weight:800;color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMin(remainMin)}</td>
+      <td style="font-weight:800;color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMinSigned(remainMin)}</td>
       <td style="text-align:right"><button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button></td>
     </tr>
     <tr id="sedit-${s.id}" class="hidden">
