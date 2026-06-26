@@ -696,7 +696,7 @@
         </div>
       </div>
 
-      <div class="staff-grid" id="staffGrid">
+      <div id="staffGrid" style="display:flex;flex-direction:column;gap:28px">
         <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
       </div>
     </div>
@@ -1649,7 +1649,28 @@ function renderStaffGrid() {
     grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub)">직원 데이터 없음</div>';
     return;
   }
-  grid.innerHTML = allStaff.map(s => {
+
+  // 팀 순서: teamList 순서 → 그 외(미등록 팀) 순서
+  const ordered = getTeamNames();
+  const extraTeams = [...new Set(allStaff.map(s => s.team || '미지정'))].filter(t => !ordered.includes(t));
+  const teamOrder = [...ordered, ...extraTeams];
+
+  grid.innerHTML = teamOrder.map(team => {
+    const members = allStaff.filter(s => (s.team || '미지정') === team);
+    if (!members.length) return ''; // 소속 직원 없는 팀은 건너뜀
+    const cards = members.map(staffCardHtml).join('');
+    return `
+      <div>
+        <div style="display:flex;align-items:baseline;gap:8px;font-size:16px;font-weight:800;padding-bottom:10px;margin-bottom:16px;border-bottom:2px solid var(--border)">
+          <span>${team}</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text-sub)">· ${members.length}명</span>
+        </div>
+        <div class="staff-grid">${cards}</div>
+      </div>`;
+  }).join('');
+}
+
+function staffCardHtml(s) {
     const { remainMin, minPerDay } = calcLeaveMinutes(s);
     const isLow = remainMin < minPerDay * 3;
     return `
@@ -1708,7 +1729,6 @@ function renderStaffGrid() {
           </div>
         </div>
       </div>`;
-  }).join('');
 }
 
 window.editStaff = function(id) {
