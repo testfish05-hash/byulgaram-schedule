@@ -507,6 +507,44 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 20px; border-top: 1px solid var(--border);
   }
+
+  /* ── 직원 관리: 팀별 섹션 + 테이블 ── */
+  .staff-section {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .staff-section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .staff-section-title { font-size: 16px; font-weight: 800; display: flex; align-items: baseline; gap: 8px; }
+  .staff-section-count { font-size: 13px; font-weight: 600; color: var(--text-sub); }
+  .staff-section-add {
+    padding: 8px 14px; background: var(--primary); color: #fff;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .staff-section-add:hover { background: var(--primary-dark); }
+  .staff-table { width: 100%; border-collapse: collapse; }
+  .staff-table thead { background: #F8FAFC; color: inherit; }
+  .staff-table thead th {
+    padding: 10px 16px; text-align: left;
+    font-size: 11px; font-weight: 700; color: var(--text-sub);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .staff-table tbody td {
+    padding: 11px 16px; font-size: 13px; vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+  }
+  .staff-table tbody tr:last-child td { border-bottom: none; }
+  .staff-table tbody tr:hover { background: var(--bg); }
+  .staff-table .st-name { font-weight: 700; }
+  .staff-table .st-input {
+    width: 100%; padding: 6px 9px;
+    border: 1.5px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  .st-add-row td { background: var(--primary-light); }
+  .st-empty-row td { text-align: center; color: var(--text-sub); padding: 20px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -657,46 +695,11 @@
       <div class="page-header">
         <div>
           <div class="page-title">직원 관리</div>
-          <div class="page-sub">입사일, 근무유형, 초기 연차를 설정하세요</div>
-        </div>
-        <button class="btn-primary" style="width:auto;padding:10px 18px;" onclick="showAddStaff()">+ 직원 추가</button>
-      </div>
-
-      <!-- 직원 추가 폼 -->
-      <div id="addStaffForm" class="col-card hidden" style="margin-bottom:20px;padding:20px;">
-        <div style="font-size:15px;font-weight:800;margin-bottom:16px;">새 직원 추가</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-          <div>
-            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">팀</label>
-            <select class="staff-edit-input" id="newTeam" style="width:100%"><option value="">팀 선택...</option></select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">이름</label>
-            <input class="staff-edit-input" id="newName" placeholder="이름" style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">근무유형</label>
-            <select class="staff-edit-input" id="newType" style="width:100%">
-              <option value="상근">상근 (8h)</option>
-              <option value="주4일">주4일 (7h24m)</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">입사일</label>
-            <input type="date" class="staff-edit-input" id="newJoin" style="width:100%">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">초기 연차</label>
-            <input type="number" class="staff-edit-input" id="newLeave" placeholder="15" min="0" max="30" style="width:100%">
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-save" onclick="saveNewStaff()">저장</button>
-          <button class="btn-edit" onclick="document.getElementById('addStaffForm').classList.add('hidden')">취소</button>
+          <div class="page-sub">팀별로 직원을 관리하세요. 각 팀의 「+ 직원 추가」로 직원을 등록할 수 있습니다.</div>
         </div>
       </div>
 
-      <div id="staffGrid" style="display:flex;flex-direction:column;gap:28px">
+      <div id="staffGrid" style="display:flex;flex-direction:column;gap:20px">
         <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
       </div>
     </div>
@@ -930,15 +933,9 @@ function teamOptionsHtml(selected) {
   ).join('');
 }
 
-// 직원 관리 페이지의 팀 드롭다운들을 teamList 기준으로 즉시 재구성
-// (직원 카드 편집폼은 renderStaffGrid, 직원 추가폼은 #newTeam select)
+// 직원 관리 페이지의 팀 섹션/드롭다운들을 teamList 기준으로 즉시 재구성
 function refreshStaffTeamDropdowns() {
   renderStaffGrid();
-  const addSel = document.getElementById('newTeam');
-  if (addSel) {
-    const cur = addSel.value;
-    addSel.innerHTML = '<option value="">팀 선택...</option>' + teamOptionsHtml(cur);
-  }
 }
 
 // ─── 페이지 전환 ───
@@ -1642,94 +1639,141 @@ window.moveTeam = async function(idx, dir) {
   await persistTeamList();
 };
 
-// ─── 직원 관리 ───
+// ─── 직원 관리 (팀별 섹션 + 테이블) ───
+let staffSectionTeams = []; // 섹션 인덱스 → 팀명 매핑
+
 function renderStaffGrid() {
   const grid = document.getElementById('staffGrid');
-  if (!allStaff.length) {
-    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub)">직원 데이터 없음</div>';
+
+  // 팀 순서: teamList(getTeamNames) 순서 → 그 외(미등록 팀) 순서
+  const ordered = getTeamNames();
+  const extraTeams = [...new Set(allStaff.map(s => s.team || '미지정'))].filter(t => !ordered.includes(t));
+  staffSectionTeams = [...ordered, ...extraTeams];
+
+  if (!staffSectionTeams.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub)">등록된 팀이 없습니다. 먼저 「팀 관리」에서 팀을 추가하세요.</div>';
     return;
   }
 
-  // 팀 순서: teamList 순서 → 그 외(미등록 팀) 순서
-  const ordered = getTeamNames();
-  const extraTeams = [...new Set(allStaff.map(s => s.team || '미지정'))].filter(t => !ordered.includes(t));
-  const teamOrder = [...ordered, ...extraTeams];
-
-  grid.innerHTML = teamOrder.map(team => {
+  grid.innerHTML = staffSectionTeams.map((team, ti) => {
     const members = allStaff.filter(s => (s.team || '미지정') === team);
-    if (!members.length) return ''; // 소속 직원 없는 팀은 건너뜀
-    const cards = members.map(staffCardHtml).join('');
+    const rows = members.map(staffRowHtml).join('');
+    const emptyRow = members.length ? '' :
+      `<tr class="st-empty-row"><td colspan="7">소속 직원이 없습니다. 「+ 직원 추가」로 등록하세요.</td></tr>`;
     return `
-      <div>
-        <div style="display:flex;align-items:baseline;gap:8px;font-size:16px;font-weight:800;padding-bottom:10px;margin-bottom:16px;border-bottom:2px solid var(--border)">
-          <span>${team}</span>
-          <span style="font-size:13px;font-weight:600;color:var(--text-sub)">· ${members.length}명</span>
+      <div class="staff-section">
+        <div class="staff-section-header">
+          <div class="staff-section-title">
+            <span>${team}</span>
+            <span class="staff-section-count">· ${members.length}명</span>
+          </div>
+          <button class="staff-section-add" onclick="showAddStaffRow(${ti})">+ 직원 추가</button>
         </div>
-        <div class="staff-grid">${cards}</div>
+        <table class="staff-table">
+          <thead>
+            <tr>
+              <th>이름</th><th>팀</th><th>근무유형</th><th>입사일</th>
+              <th>초기연차</th><th>잔여연차</th><th style="text-align:right">수정</th>
+            </tr>
+          </thead>
+          <tbody id="stbody-${ti}">
+            ${addStaffRowHtml(ti, team)}
+            ${rows}
+            ${emptyRow}
+          </tbody>
+        </table>
       </div>`;
   }).join('');
 }
 
-function staffCardHtml(s) {
-    const { remainMin, minPerDay } = calcLeaveMinutes(s);
-    const isLow = remainMin < minPerDay * 3;
-    return `
-      <div class="staff-card" id="scard-${s.id}">
-        <div class="staff-card-top">
-          <div class="staff-avatar">${s.name[0]}</div>
-          <div>
-            <div class="staff-card-name">${s.name}</div>
-            <div class="staff-card-team">${s.team}</div>
-          </div>
-        </div>
-        <div class="staff-fields" id="sview-${s.id}">
-          <div class="staff-field-row">
-            <span class="staff-field-label">근무유형</span>
-            <span class="staff-field-val">${s.type || '상근'}</span>
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">입사일</span>
-            <span class="staff-field-val">${s.joinDate || '-'}</span>
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">초기연차</span>
-            <span class="staff-field-val">${s.initLeave || '-'}일</span>
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">잔여연차</span>
-            <span class="staff-field-val" style="color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'};font-weight:800">${fmtMin(remainMin)}</span>
-          </div>
-          <div style="margin-top:8px">
-            <button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button>
-          </div>
-        </div>
-        <div class="staff-fields hidden" id="sedit-${s.id}">
-          <div class="staff-field-row">
-            <span class="staff-field-label">팀</span>
-            <select class="staff-edit-input" id="eteam-${s.id}">${teamOptionsHtml(s.team)}</select>
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">근무유형</span>
-            <select class="staff-edit-input" id="etype-${s.id}">
-              <option value="상근" ${s.type==='상근'?'selected':''}>상근</option>
-              <option value="주4일" ${s.type==='주4일'?'selected':''}>주4일</option>
-            </select>
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">입사일</span>
-            <input type="date" class="staff-edit-input" id="ejoin-${s.id}" value="${s.joinDate||''}">
-          </div>
-          <div class="staff-field-row">
-            <span class="staff-field-label">초기연차</span>
-            <input type="number" class="staff-edit-input" id="eleave-${s.id}" value="${s.initLeave||15}" min="0" max="30">
-          </div>
-          <div style="margin-top:8px;display:flex;gap:6px;">
-            <button class="btn-save" onclick="saveStaff('${s.id}')">저장</button>
-            <button class="btn-edit" onclick="cancelEdit('${s.id}')">취소</button>
-          </div>
-        </div>
-      </div>`;
+// 직원 보기 행 + 수정 행(숨김)
+function staffRowHtml(s) {
+  const { remainMin, minPerDay } = calcLeaveMinutes(s);
+  const isLow = remainMin < minPerDay * 3;
+  return `
+    <tr id="sview-${s.id}">
+      <td class="st-name">${s.name}</td>
+      <td>${s.team || '-'}</td>
+      <td>${s.type || '상근'}</td>
+      <td>${s.joinDate || '-'}</td>
+      <td>${s.initLeave != null ? s.initLeave + '일' : '-'}</td>
+      <td style="font-weight:800;color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMin(remainMin)}</td>
+      <td style="text-align:right"><button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button></td>
+    </tr>
+    <tr id="sedit-${s.id}" class="hidden">
+      <td class="st-name">${s.name}</td>
+      <td><select class="st-input" id="eteam-${s.id}">${teamOptionsHtml(s.team)}</select></td>
+      <td>
+        <select class="st-input" id="etype-${s.id}">
+          <option value="상근" ${s.type==='상근'?'selected':''}>상근</option>
+          <option value="주4일" ${s.type==='주4일'?'selected':''}>주4일</option>
+        </select>
+      </td>
+      <td><input type="date" class="st-input" id="ejoin-${s.id}" value="${s.joinDate||''}"></td>
+      <td><input type="number" class="st-input" id="eleave-${s.id}" value="${s.initLeave!=null?s.initLeave:15}" min="0" max="30"></td>
+      <td style="color:var(--text-sub)">-</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-save" onclick="saveStaff('${s.id}')">저장</button>
+        <button class="btn-edit" onclick="cancelEdit('${s.id}')">취소</button>
+      </td>
+    </tr>`;
 }
+
+// 직원 추가 입력 행 (기본 숨김, 섹션별)
+function addStaffRowHtml(ti, team) {
+  return `
+    <tr id="addrow-${ti}" class="st-add-row hidden">
+      <td><input class="st-input" id="na-name-${ti}" placeholder="이름" onkeydown="if(event.key==='Enter') saveNewStaffRow(${ti})"></td>
+      <td><select class="st-input" id="na-team-${ti}">${teamOptionsHtml(team)}</select></td>
+      <td>
+        <select class="st-input" id="na-type-${ti}">
+          <option value="상근">상근</option>
+          <option value="주4일">주4일</option>
+        </select>
+      </td>
+      <td><input type="date" class="st-input" id="na-join-${ti}"></td>
+      <td><input type="number" class="st-input" id="na-leave-${ti}" placeholder="15" min="0" max="30"></td>
+      <td style="color:var(--text-sub)">-</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-save" onclick="saveNewStaffRow(${ti})">저장</button>
+        <button class="btn-edit" onclick="cancelAddStaffRow(${ti})">취소</button>
+      </td>
+    </tr>`;
+}
+
+window.showAddStaffRow = function(ti) {
+  const row = document.getElementById(`addrow-${ti}`);
+  if (!row) return;
+  row.classList.remove('hidden');
+  document.getElementById(`na-name-${ti}`)?.focus();
+};
+window.cancelAddStaffRow = function(ti) {
+  const row = document.getElementById(`addrow-${ti}`);
+  if (!row) return;
+  row.classList.add('hidden');
+  ['na-name','na-join','na-leave'].forEach(p => { const el = document.getElementById(`${p}-${ti}`); if (el) el.value = ''; });
+};
+
+window.saveNewStaffRow = async function(ti) {
+  const name = document.getElementById(`na-name-${ti}`).value.trim();
+  const team = document.getElementById(`na-team-${ti}`).value;
+  const type = document.getElementById(`na-type-${ti}`).value;
+  const joinDate = document.getElementById(`na-join-${ti}`).value;
+  const initLeave = parseInt(document.getElementById(`na-leave-${ti}`).value) || 15;
+  if (!team || !name) { showToast('팀과 이름을 입력하세요'); return; }
+
+  const newStaff = { team, name, type, joinDate, initLeave };
+  try {
+    const ref = await addDoc(collection(db, 'staff_list'), newStaff);
+    newStaff.id = ref.id;
+  } catch(e) {
+    newStaff.id = 's' + Date.now();
+  }
+  allStaff.push(newStaff);
+  renderStaffGrid();
+  renderLeaveTable();
+  showToast('✅ 직원이 추가되었습니다');
+};
 
 window.editStaff = function(id) {
   document.getElementById(`sview-${id}`).classList.add('hidden');
@@ -1757,34 +1801,6 @@ window.saveStaff = async function(id) {
   showToast('✅ 저장되었습니다');
 };
 
-window.showAddStaff = function() {
-  // 최신 teamList 기준으로 팀 드롭다운 구성
-  document.getElementById('newTeam').innerHTML = '<option value="">팀 선택...</option>' + teamOptionsHtml();
-  document.getElementById('addStaffForm').classList.remove('hidden');
-};
-
-window.saveNewStaff = async function() {
-  const team = document.getElementById('newTeam').value.trim();
-  const name = document.getElementById('newName').value.trim();
-  const type = document.getElementById('newType').value;
-  const joinDate = document.getElementById('newJoin').value;
-  const initLeave = parseInt(document.getElementById('newLeave').value) || 15;
-  if (!team || !name) { showToast('팀과 이름을 입력하세요'); return; }
-
-  const newStaff = { team, name, type, joinDate, initLeave };
-  try {
-    const ref = await addDoc(collection(db, 'staff_list'), newStaff);
-    newStaff.id = ref.id;
-  } catch(e) {
-    newStaff.id = 's' + Date.now();
-  }
-  allStaff.push(newStaff);
-  document.getElementById('addStaffForm').classList.add('hidden');
-  ['newTeam','newName','newJoin','newLeave'].forEach(id => document.getElementById(id).value = '');
-  renderStaffGrid();
-  renderLeaveTable();
-  showToast('✅ 직원이 추가되었습니다');
-};
 </script>
 </body>
 </html>
