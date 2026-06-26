@@ -857,6 +857,17 @@ function teamOptionsHtml(selected) {
   ).join('');
 }
 
+// 직원 관리 페이지의 팀 드롭다운들을 teamList 기준으로 즉시 재구성
+// (직원 카드 편집폼은 renderStaffGrid, 직원 추가폼은 #newTeam select)
+function refreshStaffTeamDropdowns() {
+  renderStaffGrid();
+  const addSel = document.getElementById('newTeam');
+  if (addSel) {
+    const cur = addSel.value;
+    addSel.innerHTML = '<option value="">팀 선택...</option>' + teamOptionsHtml(cur);
+  }
+}
+
 // ─── 페이지 전환 ───
 window.showPage = function(page) {
   ['requests','leave','staff','teamlimit','teams'].forEach(p => {
@@ -1443,6 +1454,7 @@ window.saveNewTeam = async function() {
   document.getElementById('newTeamName').value = '';
   document.getElementById('addTeamForm').classList.add('hidden');
   renderTeamsPage();
+  refreshStaffTeamDropdowns(); // 직원 관리 팀 드롭다운 즉시 반영
   showToast('✅ 팀이 추가되었습니다');
 };
 
@@ -1482,7 +1494,7 @@ window.saveTeamName = async function(idx) {
   }
 
   renderTeamsPage();
-  renderStaffGrid();
+  refreshStaffTeamDropdowns(); // 직원 관리 팀 드롭다운/소속 즉시 반영
   showToast('✅ 팀 이름이 수정되었습니다');
 };
 
@@ -1502,6 +1514,7 @@ window.deleteTeam = async function(idx) {
   teamList.splice(idx, 1);
   await persistTeamList(); // 남은 팀 순서 재정렬
   renderTeamsPage();
+  refreshStaffTeamDropdowns(); // 직원 관리 팀 드롭다운 즉시 반영
   showToast('🗑 팀이 삭제되었습니다');
 };
 
@@ -1609,6 +1622,7 @@ window.saveStaff = async function(id) {
 };
 
 window.showAddStaff = function() {
+  // 최신 teamList 기준으로 팀 드롭다운 구성
   document.getElementById('newTeam').innerHTML = '<option value="">팀 선택...</option>' + teamOptionsHtml();
   document.getElementById('addStaffForm').classList.remove('hidden');
 };
