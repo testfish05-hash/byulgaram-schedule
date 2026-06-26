@@ -780,8 +780,14 @@
             </select>
           </div>
           <div class="lv-adj-field" id="lvAdjMinRow">
-            <label id="lvAdjMinLabel">시간 (분)</label>
-            <input type="number" id="lvAdjMin" min="0" placeholder="분 단위로 입력">
+            <label id="lvAdjMinLabel">시간</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" id="lvAdjHour" min="0" placeholder="0" oninput="updateLvAdjHint()" style="flex:1;width:auto;min-width:0">
+              <span style="font-size:13px;color:var(--text-sub);font-weight:600">시간</span>
+              <input type="number" id="lvAdjMinute" min="0" max="59" placeholder="0" oninput="updateLvAdjHint()" style="flex:1;width:auto;min-width:0">
+              <span style="font-size:13px;color:var(--text-sub);font-weight:600">분</span>
+            </div>
+            <div id="lvAdjTotalHint" style="font-size:11px;color:var(--text-sub);margin-top:6px"></div>
           </div>
           <div class="lv-adj-field">
             <label>메모</label>
@@ -1470,16 +1476,35 @@ window.onStaffMemoInput = function(staffId, val) {
 // ─── 포상/차감 모달 ───
 let lvAdjMode = 'bonus', lvAdjStaffId = null;
 
+// 시간/분 입력 → 총 분
+function lvAdjTotalMinutes() {
+  const h = parseInt(document.getElementById('lvAdjHour').value) || 0;
+  const m = parseInt(document.getElementById('lvAdjMinute').value) || 0;
+  return h * 60 + m;
+}
+// 총 분 미리보기 갱신
+window.updateLvAdjHint = function() {
+  const total = lvAdjTotalMinutes();
+  const hint = document.getElementById('lvAdjTotalHint');
+  if (hint) hint.textContent = total > 0 ? `= 총 ${total}분 (${fmtMin(total)})` : '';
+};
+
+function resetLvAdjInputs() {
+  document.getElementById('lvAdjDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('lvAdjHour').value = '';
+  document.getElementById('lvAdjMinute').value = '';
+  document.getElementById('lvAdjMemo').value = '';
+  updateLvAdjHint();
+}
+
 window.openBonusModal = function(staffId) {
   lvAdjMode = 'bonus'; lvAdjStaffId = staffId;
   document.getElementById('lvAdjTitle').textContent = '🎁 포상 연차 추가';
   document.getElementById('lvAdjTypeRow').style.display = '';
   document.getElementById('lvAdjType').value = 'all';
   document.getElementById('lvAdjMinRow').style.display = 'none';
-  document.getElementById('lvAdjMinLabel').textContent = '시간 (분)';
-  document.getElementById('lvAdjDate').value = new Date().toISOString().slice(0,10);
-  document.getElementById('lvAdjMin').value = '';
-  document.getElementById('lvAdjMemo').value = '';
+  document.getElementById('lvAdjMinLabel').textContent = '시간 직접입력';
+  resetLvAdjInputs();
   document.getElementById('lvAdjModal').classList.remove('hidden');
 };
 
@@ -1488,14 +1513,12 @@ window.openDeductModal = function(staffId) {
   document.getElementById('lvAdjTitle').textContent = '➖ 연차 차감';
   document.getElementById('lvAdjTypeRow').style.display = 'none';
   document.getElementById('lvAdjMinRow').style.display = '';
-  document.getElementById('lvAdjMinLabel').textContent = '차감 시간 (분)';
-  document.getElementById('lvAdjDate').value = new Date().toISOString().slice(0,10);
-  document.getElementById('lvAdjMin').value = '';
-  document.getElementById('lvAdjMemo').value = '';
+  document.getElementById('lvAdjMinLabel').textContent = '차감 시간';
+  resetLvAdjInputs();
   document.getElementById('lvAdjModal').classList.remove('hidden');
 };
 
-// 포상 유형 변경 시 분 입력 표시 토글 (시간 직접입력만 노출)
+// 포상 유형 변경 시 시간 입력 표시 토글 (시간 직접입력만 노출)
 window.onLvAdjTypeChange = function() {
   const t = document.getElementById('lvAdjType').value;
   document.getElementById('lvAdjMinRow').style.display = (t === 'custom') ? '' : 'none';
@@ -1522,13 +1545,13 @@ window.submitLvAdj = async function() {
     let amt;
     if (subType === 'all') amt = getDeductMin(date, staff.type);
     else if (subType === 'half') amt = Math.round(getDeductMin(date, staff.type) / 2);
-    else amt = parseInt(document.getElementById('lvAdjMin').value) || 0;
+    else amt = lvAdjTotalMinutes();
     if (amt <= 0) { showToast('시간을 올바르게 입력하세요'); return; }
     // bonusMin(양수)로 합산. leaveAmount는 음수로 보관(차감 아닌 가산 의미)
     data = { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
              bonusMin: amt, leaveAmount: -amt, leaveSubType: subType, memo, createdAt: serverTimestamp() };
   } else {
-    const amt = parseInt(document.getElementById('lvAdjMin').value) || 0;
+    const amt = lvAdjTotalMinutes();
     if (amt <= 0) { showToast('차감 시간을 입력하세요'); return; }
     data = { type:'deduct', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
              deductMin: amt, memo, createdAt: serverTimestamp() };
