@@ -695,7 +695,7 @@
         </div>
       </div>
 
-      <div class="staff-grid" id="teamsGrid">
+      <div id="teamsGrid" style="display:flex;flex-direction:column;gap:10px">
         <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
       </div>
     </div>
@@ -1389,30 +1389,32 @@ function renderTeamsPage() {
     const memberCount = allStaff.filter(s => s.team === t.name).length;
     const color = TEAM_COLORS[idx % TEAM_COLORS.length];
     return `
-      <div class="staff-card" style="border-top:3px solid ${color}">
-        <div class="staff-card-top">
-          <div class="staff-avatar" style="background:${color}22;color:${color}">${t.name[0] || '?'}</div>
-          <div style="flex:1">
+      <div class="staff-card" style="border-left:4px solid ${color};padding:14px 16px;display:flex;align-items:center;gap:14px">
+        <div class="staff-avatar" style="background:${color}22;color:${color};flex-shrink:0">${t.name[0] || '?'}</div>
+
+        <!-- 보기 모드 -->
+        <div id="tview-${idx}" style="flex:1;display:flex;align-items:center;gap:14px;min-width:0">
+          <div style="flex:1;min-width:0">
             <div class="staff-card-name" id="tname-${idx}">${t.name}</div>
             <div class="staff-card-team">${memberCount}명 · 순서 ${idx + 1}</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <button class="btn-edit" onclick="moveTeam(${idx},-1)" ${idx === 0 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▲</button>
-            <button class="btn-edit" onclick="moveTeam(${idx},1)" ${idx === teamList.length - 1 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▼</button>
-          </div>
-        </div>
-        <div id="tview-${idx}">
-          <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="display:flex;gap:6px;flex-shrink:0">
             <button class="btn-edit" onclick="editTeam(${idx})">✏️ 이름수정</button>
             <button class="btn-reject" onclick="deleteTeam(${idx})">🗑 삭제</button>
           </div>
         </div>
-        <div id="tedit-${idx}" class="hidden">
-          <input class="staff-edit-input" id="tinput-${idx}" value="${t.name}" style="width:100%;margin-top:8px" onkeydown="if(event.key==='Enter') saveTeamName(${idx})">
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="btn-save" onclick="saveTeamName(${idx})">저장</button>
-            <button class="btn-edit" onclick="renderTeamsPageGlobal()">취소</button>
-          </div>
+
+        <!-- 수정 모드 -->
+        <div id="tedit-${idx}" class="hidden" style="flex:1;display:flex;align-items:center;gap:8px;min-width:0">
+          <input class="staff-edit-input" id="tinput-${idx}" value="${t.name}" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter') saveTeamName(${idx})">
+          <button class="btn-save" onclick="saveTeamName(${idx})">저장</button>
+          <button class="btn-edit" onclick="renderTeamsPageGlobal()">취소</button>
+        </div>
+
+        <!-- 순서 변경 (우측 고정) -->
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;border-left:1px solid var(--border);padding-left:12px">
+          <button class="btn-edit" onclick="moveTeam(${idx},-1)" ${idx === 0 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▲</button>
+          <button class="btn-edit" onclick="moveTeam(${idx},1)" ${idx === teamList.length - 1 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▼</button>
         </div>
       </div>`;
   }).join('');
