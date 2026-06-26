@@ -555,9 +555,10 @@
   }
   .lv-adj-field textarea { height: 60px; resize: vertical; }
   .lv-adj-field input:focus, .lv-adj-field select:focus, .lv-adj-field textarea:focus { outline: none; border-color: var(--primary); }
-  /* 내역 테이블 포상/차감 배지 */
+  /* 내역 테이블 포상/차감/정산 배지 */
   .lh-bonus { background: var(--accent-green-light); color: var(--accent-green); }
   .lh-deduct { background: var(--accent-red-light); color: var(--accent-red); }
+  .lh-settle { background: #E5E7EB; color: #4B5563; }
 </style>
 </head>
 <body>
@@ -801,6 +802,36 @@
       </div>
     </div>
 
+    <!-- 연차 정산 모달 -->
+    <div id="settleModal" class="tl-modal-overlay hidden" onclick="closeSettleModal(event)">
+      <div class="tl-modal">
+        <div class="tl-modal-header">
+          <div class="tl-modal-title">🧾 연차 정산</div>
+          <button class="tl-modal-x" onclick="closeSettleModalForce()">✕</button>
+        </div>
+        <div class="tl-modal-body">
+          <div class="lv-adj-field">
+            <label>현재 잔여연차</label>
+            <div style="font-size:24px;font-weight:800" id="settleRemain">-</div>
+            <div id="settleGuide" style="font-size:13px;color:var(--text-sub);margin-top:6px;font-weight:600"></div>
+          </div>
+          <div class="lv-adj-field">
+            <label>새 연차 부여 (개)</label>
+            <input type="number" id="settleNewDays" min="0" placeholder="0" oninput="updateSettleHint()">
+            <div id="settleNewHint" style="font-size:11px;color:var(--text-sub);margin-top:6px"></div>
+          </div>
+          <div class="lv-adj-field">
+            <label>정산 메모</label>
+            <textarea id="settleMemo" placeholder="정산 사유·내용을 입력하세요"></textarea>
+          </div>
+        </div>
+        <div class="tl-modal-footer">
+          <button class="btn-edit" onclick="closeSettleModalForce()">취소</button>
+          <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="submitSettle()">정산 확인</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 팀 관리 페이지 -->
     <div id="page-teams" class="hidden">
       <div class="page-header">
@@ -1007,8 +1038,8 @@ window.showPage = function(page) {
 
 // ─── 통계 ───
 function updateStats() {
-  // 포상/차감은 근무 신청 통계에서 제외
-  const reqs = allRequests.filter(r => r.type !== 'bonus' && r.type !== 'deduct');
+  // 포상/차감/정산은 근무 신청 통계에서 제외
+  const reqs = allRequests.filter(r => !['bonus','deduct','settlement'].includes(r.type));
   const pending = reqs.filter(r => r.status === 'pending').length;
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
@@ -1055,7 +1086,7 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayOfWeek = new Date(calYear, calMonth, d).getDay();
-    const dayReqs = allRequests.filter(r => r.date === dateStr && r.type !== 'bonus' && r.type !== 'deduct');
+    const dayReqs = allRequests.filter(r => r.date === dateStr && !['bonus','deduct','settlement'].includes(r.type));
 
     const isSun = dayOfWeek === 0, isSat = dayOfWeek === 6;
     const isToday = dateStr === todayStr;
@@ -1215,8 +1246,14 @@ function calcLeaveMinutes(staff) {
     .filter(r => r.staffName === staff.name && r.type === 'deduct' && r.status === 'approved')
     .reduce((sum, r) => sum + (r.deductMin || 0), 0);
 
+  // 정산: settlementMin(양수=잔여 줄임, 음수=잔여 늘림)을 usedMin에 합산
+  const settlementMin = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
+    .reduce((sum, r) => sum + (r.settlementMin || 0), 0);
+  usedMin += settlementMin;
+
   const remainMin = totalMin - usedMin - deductMin;
-  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, totalDays, years, minPerDay };
+  return { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, settlementMin, remainMin, totalDays, years, minPerDay };
 }
 
 // 분 → "Xh Ym" 문자열
@@ -1279,10 +1316,10 @@ window.selectLeaveStaff = function(staffId) {
 
   const { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, years, minPerDay } = calcLeaveMinutes(staff);
 
-  // 통합 내역: 연차 신청 + 포상 + 차감 (날짜 오름차순)
+  // 통합 내역: 연차 신청 + 포상 + 차감 + 정산 (날짜 오름차순)
   const ledger = allRequests
     .filter(r => r.staffName === staff.name &&
-      (r.type === 'leave' || ((r.type === 'bonus' || r.type === 'deduct') && r.status === 'approved')))
+      (r.type === 'leave' || (['bonus','deduct','settlement'].includes(r.type) && r.status === 'approved')))
     .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
 
   // 누적 잔여: 기본 보유에서 시작 (포상 가산 / 사용·차감 감산)
@@ -1293,6 +1330,12 @@ window.selectLeaveStaff = function(staffId) {
 
   const detail = document.getElementById('lvDetail');
   detail.innerHTML = `
+    <!-- 상단 액션 바 -->
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;font-weight:700;color:var(--text-sub)">📊 ${staff.name} 연차 상세</div>
+      <button class="btn-primary" style="width:auto;padding:8px 16px" onclick="openSettleModal('${staffId}')">🧾 연차 정산</button>
+    </div>
+
     <!-- 상단 요약 카드 -->
     <div class="lv-summary-row">
       <div class="lv-summary-card">
@@ -1378,6 +1421,16 @@ window.selectLeaveStaff = function(staffId) {
                 typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
                 amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
                 remainCell = fmtMinSigned(runMin);
+                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+              } else if (r.type === 'settlement') {
+                const sm = r.settlementMin || 0; // 양수=잔여 줄임, 음수=잔여 늘림
+                runMin -= sm;
+                typeLabel = '🧾 정산'; typeCls = 'lh-settle';
+                amtCell = sm >= 0
+                  ? `<span style="color:var(--text-sub);font-weight:700">-${fmtMin(sm)}</span>`
+                  : `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(-sm)}</span>`;
+                remainCell = fmtMinSigned(runMin); // 정산 후 0
                 actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
                 docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
               } else {
@@ -1571,7 +1624,7 @@ window.submitLvAdj = async function() {
   showToast(lvAdjMode === 'bonus' ? '🎁 포상 연차가 추가되었습니다' : '➖ 연차가 차감되었습니다');
 };
 
-// 포상/차감 항목 삭제
+// 포상/차감/정산 항목 삭제
 window.deleteAdjReq = async function(reqId, staffId) {
   if (!confirm('이 항목을 삭제하시겠습니까?')) return;
   try { await deleteDoc(doc(db, 'schedule_requests', reqId)); } catch(e) {}
@@ -1581,6 +1634,90 @@ window.deleteAdjReq = async function(reqId, staffId) {
   selectLeaveStaff(staffId);
   updateStats();
   showToast('🗑 삭제되었습니다');
+};
+
+// ─── 연차 정산 ───
+let settleStaffId = null;
+
+window.openSettleModal = function(staffId) {
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+  settleStaffId = staffId;
+  const { remainMin, minPerDay, years } = calcLeaveMinutes(staff);
+
+  const remainEl = document.getElementById('settleRemain');
+  remainEl.textContent = fmtMinSigned(remainMin);
+  remainEl.style.color = remainMin < 0 ? 'var(--accent-red)' : remainMin > 0 ? 'var(--accent-green)' : 'var(--text-sub)';
+
+  let guide;
+  if (remainMin > 0) guide = `🔵 잔여 ${fmtMinSigned(remainMin)} → 급여 지급 후 0 처리`;
+  else if (remainMin < 0) guide = `🔴 잔여 ${fmtMinSigned(remainMin)} → 급여 차감 후 0 처리`;
+  else guide = '잔여가 0입니다 (정산 후에도 신규 연차만 부여됩니다)';
+  document.getElementById('settleGuide').textContent = guide;
+
+  // 다음 연도 자동 연차 개수 기본값
+  const nextDays = autoLeaveDays(years + 1);
+  document.getElementById('settleNewDays').value = nextDays;
+  document.getElementById('settleMemo').value = '';
+  updateSettleHint();
+  document.getElementById('settleModal').classList.remove('hidden');
+};
+
+window.updateSettleHint = function() {
+  const staff = allStaff.find(s => s.id === settleStaffId);
+  if (!staff) return;
+  const minPerDay = getMinPerDay(staff);
+  const days = parseInt(document.getElementById('settleNewDays').value) || 0;
+  const hint = document.getElementById('settleNewHint');
+  if (hint) hint.textContent = days > 0 ? `= ${fmtMin(days * minPerDay)} (1일=${fmtMin(minPerDay)})` : '';
+};
+
+window.closeSettleModal = function(e) {
+  if (e.target === document.getElementById('settleModal')) closeSettleModalForce();
+};
+window.closeSettleModalForce = function() {
+  document.getElementById('settleModal').classList.add('hidden');
+};
+
+window.submitSettle = async function() {
+  const staffId = settleStaffId;
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+  const { remainMin, minPerDay } = calcLeaveMinutes(staff);
+  const newDays = parseInt(document.getElementById('settleNewDays').value);
+  if (isNaN(newDays) || newDays < 0) { showToast('새 연차 개수를 입력하세요'); return; }
+  const newLeaveMin = newDays * minPerDay;
+  const memo = document.getElementById('settleMemo').value.trim();
+  const date = new Date().toISOString().slice(0,10);
+  const settleKind = remainMin > 0 ? '급여 지급 정산' : remainMin < 0 ? '급여 차감 정산' : '정산';
+
+  // 1) 정산: 잔여를 0으로 (settlementMin = 현재 잔여)
+  // 2) 포상: 새 연차 부여
+  const docs = [
+    { type:'settlement', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+      settlementMin: remainMin,
+      memo: `${settleKind} · 잔여 ${fmtMinSigned(remainMin)} → 0${memo ? ' · ' + memo : ''}`,
+      createdAt: serverTimestamp() },
+    { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
+      bonusMin: newLeaveMin, leaveAmount: -newLeaveMin, leaveSubType:'settlement',
+      memo: `정산 후 신규 연차 ${newDays}개 부여${memo ? ' · ' + memo : ''}`,
+      createdAt: serverTimestamp() },
+  ];
+  for (const d of docs) {
+    try {
+      const ref = await addDoc(collection(db, 'schedule_requests'), d);
+      d.id = ref.id;
+    } catch(e) {
+      d.id = 'st-' + d.type + '-' + Date.now();
+    }
+    allRequests.push({ ...d, createdAt: null });
+  }
+
+  closeSettleModalForce();
+  renderLeaveTable();
+  selectLeaveStaff(staffId);
+  updateStats();
+  showToast('🧾 연차 정산이 완료되었습니다');
 };
 
 // ─── 팀 인원 제한 ───

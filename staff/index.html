@@ -1025,8 +1025,8 @@ async function loadHistory() {
   try {
     const snap = await getDocs(query(collection(db,'schedule_requests'),
       where('staffName','==',currentUser.name), orderBy('createdAt','desc')));
-    // 관리자 전용 포상/차감 항목은 신청 내역에서 제외
-    const items = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => r.type !== 'bonus' && r.type !== 'deduct');
+    // 관리자 전용 포상/차감/정산 항목은 신청 내역에서 제외
+    const items = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => !['bonus','deduct','settlement'].includes(r.type));
     if (!items.length) { list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">신청 내역이 없습니다</div>'; return; }
     list.innerHTML = '';
     items.forEach(r => list.appendChild(renderHistItem(r)));
