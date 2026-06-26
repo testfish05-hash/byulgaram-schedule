@@ -486,6 +486,9 @@
     <div class="sidebar-item" onclick="showPage('staff')" id="nav-staff">
       <span>👥</span><span>직원 관리</span>
     </div>
+    <div class="sidebar-item" onclick="showPage('teams')" id="nav-teams">
+      <span>🏷️</span><span>팀 관리</span>
+    </div>
     <div class="sidebar-item" onclick="showPage('teamlimit')" id="nav-teamlimit">
       <span>🔢</span><span>팀 인원 제한</span>
     </div>
@@ -613,7 +616,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
           <div>
             <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">팀</label>
-            <input class="staff-edit-input" id="newTeam" placeholder="팀 이름" style="width:100%">
+            <select class="staff-edit-input" id="newTeam" style="width:100%"><option value="">팀 선택...</option></select>
           </div>
           <div>
             <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">이름</label>
@@ -669,6 +672,34 @@
       <div id="tlPreviewBody"></div>
     </div>
 
+    <!-- 팀 관리 페이지 -->
+    <div id="page-teams" class="hidden">
+      <div class="page-header">
+        <div>
+          <div class="page-title">팀 관리</div>
+          <div class="page-sub">팀을 추가·수정·삭제하고 순서를 변경하세요</div>
+        </div>
+        <button class="btn-primary" style="width:auto;padding:10px 18px;" onclick="showAddTeam()">+ 팀 추가</button>
+      </div>
+
+      <!-- 팀 추가 폼 -->
+      <div id="addTeamForm" class="col-card hidden" style="margin-bottom:20px;padding:20px;">
+        <div style="font-size:15px;font-weight:800;margin-bottom:16px;">새 팀 추가</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">팀 이름</label>
+            <input class="staff-edit-input" id="newTeamName" placeholder="팀 이름" style="width:100%" onkeydown="if(event.key==='Enter') saveNewTeam()">
+          </div>
+          <button class="btn-save" onclick="saveNewTeam()">저장</button>
+          <button class="btn-edit" onclick="document.getElementById('addTeamForm').classList.add('hidden')">취소</button>
+        </div>
+      </div>
+
+      <div class="staff-grid" id="teamsGrid">
+        <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div>
 
@@ -676,7 +707,7 @@
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, getDocs, updateDoc, addDoc, doc, setDoc,
+import { getFirestore, collection, getDocs, updateDoc, addDoc, doc, setDoc, deleteDoc,
   query, where, orderBy, serverTimestamp, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -697,6 +728,7 @@ const db = getFirestore(app);
 let allRequests = [];
 let allStaff = [];
 let teamLimits = {}; // { '진료팀': 2, '데스크팀': 1, ... }
+let teamList = [];   // [{ id, name, order }] - team_list 컬렉션
 let calYear, calMonth;
 let editingStaff = {};
 
@@ -738,6 +770,7 @@ window.doLogout = function() {
 
 async function initAdmin() {
   await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits()]);
+  await loadTeamList();
   renderCalendar();
   renderLeaveTable();
   renderStaffGrid();
@@ -779,15 +812,61 @@ async function loadAllStaff() {
   }
 }
 
+// ─── 팀 목록 로드 (team_list 컬렉션) ───
+async function loadTeamList() {
+  try {
+    const snap = await getDocs(collection(db, 'team_list'));
+    teamList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    teamList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  } catch {
+    teamList = [];
+  }
+  // 비어있으면 기존 직원/제한 데이터에서 팀명을 추출해 자동 시드
+  if (!teamList.length) {
+    const derived = [...new Set([
+      ...allStaff.map(s => s.team).filter(Boolean),
+      ...Object.keys(teamLimits),
+    ])];
+    teamList = derived.map((name, i) => ({ id: null, name, order: i }));
+    if (teamList.length) await persistTeamList();
+  }
+}
+
+// teamList 전체를 현재 순서대로 Firestore에 반영 (id 없으면 생성)
+async function persistTeamList() {
+  for (let i = 0; i < teamList.length; i++) {
+    const t = teamList[i];
+    t.order = i;
+    try {
+      if (t.id) {
+        await updateDoc(doc(db, 'team_list', t.id), { name: t.name, order: i });
+      } else {
+        const ref = await addDoc(collection(db, 'team_list'), { name: t.name, order: i });
+        t.id = ref.id;
+      }
+    } catch(e) {
+      if (!t.id) t.id = 't' + Date.now() + i;
+    }
+  }
+}
+
+// 팀 드롭다운용 <option> HTML
+function teamOptionsHtml(selected) {
+  return getTeamNames().map(t =>
+    `<option value="${t}" ${t === selected ? 'selected' : ''}>${t}</option>`
+  ).join('');
+}
+
 // ─── 페이지 전환 ───
 window.showPage = function(page) {
-  ['requests','leave','staff','teamlimit'].forEach(p => {
+  ['requests','leave','staff','teamlimit','teams'].forEach(p => {
     document.getElementById(`page-${p}`)?.classList.add('hidden');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
   document.getElementById(`page-${page}`)?.classList.remove('hidden');
   document.getElementById(`nav-${page}`)?.classList.add('active');
   if (page === 'teamlimit') renderTeamLimitCards();
+  if (page === 'teams') renderTeamsPage();
 };
 
 // ─── 통계 ───
@@ -1188,6 +1267,8 @@ async function loadTeamLimits() {
 }
 
 function getTeamNames() {
+  // team_list 가 우선. 없을 때만 직원/제한 데이터에서 추출 (마이그레이션 폴백)
+  if (teamList.length) return teamList.map(t => t.name);
   const fromStaff = [...new Set(allStaff.map(s => s.team).filter(Boolean))];
   const fromLimits = Object.keys(teamLimits);
   return [...new Set([...fromStaff, ...fromLimits])];
@@ -1295,6 +1376,141 @@ window.renderTeamLimitPreview = function() {
     }).join('') + '</div>';
 };
 
+// ─── 팀 관리 ───
+const TEAM_COLORS = ['var(--primary)','var(--accent-green)','var(--accent-purple)','var(--accent-orange)','#E53E3E','#0891B2'];
+
+function renderTeamsPage() {
+  const grid = document.getElementById('teamsGrid');
+  if (!teamList.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub)">등록된 팀이 없습니다. 우측 상단 「+ 팀 추가」로 시작하세요.</div>';
+    return;
+  }
+  grid.innerHTML = teamList.map((t, idx) => {
+    const memberCount = allStaff.filter(s => s.team === t.name).length;
+    const color = TEAM_COLORS[idx % TEAM_COLORS.length];
+    return `
+      <div class="staff-card" style="border-top:3px solid ${color}">
+        <div class="staff-card-top">
+          <div class="staff-avatar" style="background:${color}22;color:${color}">${t.name[0] || '?'}</div>
+          <div style="flex:1">
+            <div class="staff-card-name" id="tname-${idx}">${t.name}</div>
+            <div class="staff-card-team">${memberCount}명 · 순서 ${idx + 1}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn-edit" onclick="moveTeam(${idx},-1)" ${idx === 0 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▲</button>
+            <button class="btn-edit" onclick="moveTeam(${idx},1)" ${idx === teamList.length - 1 ? 'disabled style="opacity:0.3;cursor:default"' : ''}>▼</button>
+          </div>
+        </div>
+        <div id="tview-${idx}">
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn-edit" onclick="editTeam(${idx})">✏️ 이름수정</button>
+            <button class="btn-reject" onclick="deleteTeam(${idx})">🗑 삭제</button>
+          </div>
+        </div>
+        <div id="tedit-${idx}" class="hidden">
+          <input class="staff-edit-input" id="tinput-${idx}" value="${t.name}" style="width:100%;margin-top:8px" onkeydown="if(event.key==='Enter') saveTeamName(${idx})">
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn-save" onclick="saveTeamName(${idx})">저장</button>
+            <button class="btn-edit" onclick="renderTeamsPageGlobal()">취소</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+window.renderTeamsPageGlobal = renderTeamsPage;
+
+window.showAddTeam = function() {
+  const f = document.getElementById('addTeamForm');
+  f.classList.remove('hidden');
+  document.getElementById('newTeamName').focus();
+};
+
+window.saveNewTeam = async function() {
+  const name = document.getElementById('newTeamName').value.trim();
+  if (!name) { showToast('팀 이름을 입력하세요'); return; }
+  if (teamList.some(t => t.name === name)) { showToast('이미 존재하는 팀입니다'); return; }
+
+  const newTeam = { name, order: teamList.length };
+  try {
+    const ref = await addDoc(collection(db, 'team_list'), newTeam);
+    newTeam.id = ref.id;
+  } catch(e) {
+    newTeam.id = 't' + Date.now();
+  }
+  teamList.push(newTeam);
+  document.getElementById('newTeamName').value = '';
+  document.getElementById('addTeamForm').classList.add('hidden');
+  renderTeamsPage();
+  showToast('✅ 팀이 추가되었습니다');
+};
+
+window.editTeam = function(idx) {
+  document.getElementById(`tview-${idx}`).classList.add('hidden');
+  document.getElementById(`tedit-${idx}`).classList.remove('hidden');
+};
+
+window.saveTeamName = async function(idx) {
+  const t = teamList[idx];
+  const oldName = t.name;
+  const newName = document.getElementById(`tinput-${idx}`).value.trim();
+  if (!newName) { showToast('팀 이름을 입력하세요'); return; }
+  if (newName === oldName) { renderTeamsPage(); return; }
+  if (teamList.some((x, i) => i !== idx && x.name === newName)) { showToast('이미 존재하는 팀입니다'); return; }
+
+  t.name = newName;
+  try {
+    if (t.id) await updateDoc(doc(db, 'team_list', t.id), { name: newName });
+    else { const ref = await addDoc(collection(db, 'team_list'), { name: newName, order: idx }); t.id = ref.id; }
+  } catch(e) {}
+
+  // 소속 직원의 팀명 일괄 변경
+  const affected = allStaff.filter(s => s.team === oldName);
+  for (const s of affected) {
+    s.team = newName;
+    try { await updateDoc(doc(db, 'staff_list', s.id), { team: newName }); } catch(e) {}
+  }
+  // 팀 인원 제한 키 이전
+  if (teamLimits[oldName]) {
+    teamLimits[newName] = teamLimits[oldName];
+    delete teamLimits[oldName];
+    try {
+      await setDoc(doc(db, 'team_limits', newName), teamLimits[newName]);
+      await deleteDoc(doc(db, 'team_limits', oldName));
+    } catch(e) {}
+  }
+
+  renderTeamsPage();
+  renderStaffGrid();
+  showToast('✅ 팀 이름이 수정되었습니다');
+};
+
+window.deleteTeam = async function(idx) {
+  const t = teamList[idx];
+  const memberCount = allStaff.filter(s => s.team === t.name).length;
+  const msg = memberCount > 0
+    ? `'${t.name}' 팀에 직원 ${memberCount}명이 소속되어 있습니다.\n팀을 삭제하시겠습니까? (직원 데이터의 팀 정보는 그대로 유지됩니다)`
+    : `'${t.name}' 팀을 삭제하시겠습니까?`;
+  if (!confirm(msg)) return;
+
+  try {
+    if (t.id) await deleteDoc(doc(db, 'team_list', t.id));
+    // 팀 인원 제한도 정리
+    if (teamLimits[t.name]) { await deleteDoc(doc(db, 'team_limits', t.name)); delete teamLimits[t.name]; }
+  } catch(e) {}
+  teamList.splice(idx, 1);
+  await persistTeamList(); // 남은 팀 순서 재정렬
+  renderTeamsPage();
+  showToast('🗑 팀이 삭제되었습니다');
+};
+
+window.moveTeam = async function(idx, dir) {
+  const ni = idx + dir;
+  if (ni < 0 || ni >= teamList.length) return;
+  [teamList[idx], teamList[ni]] = [teamList[ni], teamList[idx]];
+  renderTeamsPage();
+  await persistTeamList();
+};
+
 // ─── 직원 관리 ───
 function renderStaffGrid() {
   const grid = document.getElementById('staffGrid');
@@ -1337,6 +1553,10 @@ function renderStaffGrid() {
         </div>
         <div class="staff-fields hidden" id="sedit-${s.id}">
           <div class="staff-field-row">
+            <span class="staff-field-label">팀</span>
+            <select class="staff-edit-input" id="eteam-${s.id}">${teamOptionsHtml(s.team)}</select>
+          </div>
+          <div class="staff-field-row">
             <span class="staff-field-label">근무유형</span>
             <select class="staff-edit-input" id="etype-${s.id}">
               <option value="상근" ${s.type==='상근'?'selected':''}>상근</option>
@@ -1370,22 +1590,24 @@ window.cancelEdit = function(id) {
 };
 
 window.saveStaff = async function(id) {
+  const team = document.getElementById(`eteam-${id}`).value;
   const type = document.getElementById(`etype-${id}`).value;
   const joinDate = document.getElementById(`ejoin-${id}`).value;
   const initLeave = parseInt(document.getElementById(`eleave-${id}`).value) || 15;
 
   try {
-    await updateDoc(doc(db, 'staff_list', id), { type, joinDate, initLeave });
+    await updateDoc(doc(db, 'staff_list', id), { team, type, joinDate, initLeave });
   } catch(e) {}
 
   const staff = allStaff.find(s => s.id === id);
-  if (staff) Object.assign(staff, { type, joinDate, initLeave });
+  if (staff) Object.assign(staff, { team, type, joinDate, initLeave });
   renderStaffGrid();
   renderLeaveTable();
   showToast('✅ 저장되었습니다');
 };
 
 window.showAddStaff = function() {
+  document.getElementById('newTeam').innerHTML = '<option value="">팀 선택...</option>' + teamOptionsHtml();
   document.getElementById('addStaffForm').classList.remove('hidden');
 };
 
