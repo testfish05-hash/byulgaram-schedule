@@ -559,6 +559,20 @@
   .lh-bonus { background: var(--accent-green-light); color: var(--accent-green); }
   .lh-deduct { background: var(--accent-red-light); color: var(--accent-red); }
   .lh-settle { background: #E5E7EB; color: #4B5563; }
+
+  /* ── 연차 기간 아코디언 ── */
+  .lv-period { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .lv-period-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; transition: background 0.12s; }
+  .lv-period-header:hover { background: var(--bg); }
+  .lv-period-range { font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .lv-period-sum { font-size: 12px; color: var(--text-sub); margin-top: 4px; }
+  .lv-period-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .lv-period-badge.cur { background: var(--primary-light); color: var(--primary); }
+  .lv-period-badge.done { background: #E5E7EB; color: #4B5563; }
+  .lv-period-toggle { font-size: 14px; color: var(--text-sub); flex-shrink: 0; transition: transform 0.2s; }
+  .lv-period.open .lv-period-toggle { transform: rotate(180deg); }
+  .lv-period-body { display: none; border-top: 1px solid var(--border); }
+  .lv-period.open .lv-period-body { display: block; }
 </style>
 </head>
 <body>
@@ -1302,6 +1316,94 @@ function renderLeaveTable() {  // 이름 유지 (호출부 호환)
   }).join('');
 }
 
+// 내역 테이블 행 렌더 (기간별 공용). startMin부터 누적 잔여 계산
+function ledgerRowsHtml(staff, staffId, rows, startMin) {
+  let runMin = startMin;
+  return rows.map((r, i) => {
+    let typeLabel, typeCls, amtCell, remainCell, actionHtml, docCell;
+
+    if (r.type === 'bonus') {
+      const amt = r.bonusMin || 0;
+      runMin += amt;
+      typeLabel = '🎁 포상'; typeCls = 'lh-bonus';
+      amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
+      remainCell = fmtMinSigned(runMin);
+      actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+      docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+    } else if (r.type === 'deduct') {
+      const amt = r.deductMin || 0;
+      runMin -= amt;
+      typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
+      amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
+      remainCell = fmtMinSigned(runMin);
+      actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+      docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+    } else if (r.type === 'settlement') {
+      const sm = r.settlementMin || 0;
+      runMin -= sm;
+      typeLabel = '🧾 정산'; typeCls = 'lh-settle';
+      amtCell = sm >= 0
+        ? `<span style="color:var(--text-sub);font-weight:700">-${fmtMin(sm)}</span>`
+        : `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(-sm)}</span>`;
+      remainCell = fmtMinSigned(runMin);
+      actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
+      docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
+    } else {
+      // 연차 신청
+      let dm = 0;
+      if (r.status === 'approved') {
+        if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+          const [sh,sm] = r.startTime.split(':').map(Number);
+          const [eh,em] = r.endTime.split(':').map(Number);
+          dm = (eh*60+em) - (sh*60+sm);
+        } else {
+          dm = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
+        }
+        runMin -= dm;
+      }
+      typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
+      typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
+      amtCell = r.status === 'approved' ? `<span style="color:var(--accent-orange);font-weight:700">-${fmtMin(dm)}</span>` : '-';
+      remainCell = r.status === 'approved' ? fmtMinSigned(runMin) : '-';
+      const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
+      const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
+      if (r.status === 'pending') {
+        actionHtml = `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
+           <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`;
+      } else if (r.status === 'approved') {
+        actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+           <span class="lh-status ${stClass}">${stLabel}</span>
+           <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">반려로 변경</button>
+           <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+         </div>`;
+      } else {
+        actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+           <span class="lh-status ${stClass}">${stLabel}</span>
+           <button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">승인으로 변경</button>
+           <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
+         </div>`;
+      }
+      docCell = `<td style="text-align:center;font-size:16px;cursor:pointer" onclick="toggleDoc('${r.id}','${staffId}')" title="클릭하여 작성여부 토글">${r.docSubmitted ? '✅' : '☐'}</td>`;
+    }
+
+    return `
+      <tr>
+        <td style="color:var(--text-sub);font-size:11px">${i+1}</td>
+        <td style="font-weight:700;white-space:nowrap">${r.date || '-'}</td>
+        <td><span class="lh-type-badge ${typeCls}">${typeLabel}</span></td>
+        <td style="font-weight:700">${amtCell}</td>
+        <td style="font-size:12px;color:var(--text-sub)">${remainCell}</td>
+        <td style="font-size:12px;color:var(--text-sub);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.memo||'-'}</td>
+        ${docCell}
+        <td>${actionHtml}</td>
+      </tr>`;
+  }).join('');
+}
+
+window.togglePeriod = function(idx) {
+  document.getElementById('period-' + idx)?.classList.toggle('open');
+};
+
 // ─── 연차 현황: 직원 선택 상세 ───
 let selectedLeaveStaffId = null;
 
@@ -1316,25 +1418,96 @@ window.selectLeaveStaff = function(staffId) {
 
   const { baseTotalMin, bonusMin, totalMin, usedMin, deductMin, remainMin, years, minPerDay } = calcLeaveMinutes(staff);
 
-  // 통합 내역: 연차 신청 + 포상 + 차감 + 정산 (날짜 오름차순)
-  const ledger = allRequests
-    .filter(r => r.staffName === staff.name &&
-      (r.type === 'leave' || (['bonus','deduct','settlement'].includes(r.type) && r.status === 'approved')))
-    .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
-
-  // 누적 잔여: 기본 보유에서 시작 (포상 가산 / 사용·차감 감산)
-  let runMin = baseTotalMin;
-
   const remainColor = remainMin < minPerDay * 3 ? 'var(--accent-red)' : 'var(--accent-green)';
   const safeMemo = (staff.memo || '').replace(/</g, '&lt;');
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  // ── 연차 기간 구성 (정산 기준) ──
+  const settlements = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
+    .sort((a, b) => ((a.periodEnd || a.date || '') < (b.periodEnd || b.date || '')) ? -1 : 1);
+
+  const periods = [];
+  let prevEnd = staff.joinDate || todayStr;
+  settlements.forEach((s, idx) => {
+    const start = s.periodStart || prevEnd;
+    const end = s.periodEnd || s.date;
+    periods.push({ start, end, settlement: s, isCurrent: false, isFirst: idx === 0 });
+    prevEnd = end;
+  });
+  periods.push({ start: prevEnd, end: todayStr, settlement: null, isCurrent: true, isFirst: settlements.length === 0 });
+
+  // 각 기간 아코디언 HTML (최신 기간이 위로)
+  const periodsHtml = periods.map((p, idx) => {
+    // 기간 내 항목 (정산 doc 제외, 날짜 범위 [start, end) / 현재기는 [start, 오늘])
+    const entries = allRequests
+      .filter(r => r.staffName === staff.name &&
+        (r.type === 'leave' || ((r.type === 'bonus' || r.type === 'deduct') && r.status === 'approved')) &&
+        r.date && r.date >= p.start && (p.isCurrent ? true : r.date < p.end))
+      .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+
+    // 기간 요약
+    let bonusP = 0, usedP = 0, deductP = 0;
+    entries.forEach(r => {
+      if (r.type === 'bonus') bonusP += (r.bonusMin || 0);
+      else if (r.type === 'deduct') deductP += (r.deductMin || 0);
+      else if (r.type === 'leave' && r.status === 'approved') {
+        if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+          const [sh,sm] = r.startTime.split(':').map(Number);
+          const [eh,em] = r.endTime.split(':').map(Number);
+          usedP += (eh*60+em) - (sh*60+sm);
+        } else {
+          usedP += (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
+        }
+      }
+    });
+    const baseP = p.isFirst ? baseTotalMin : 0;
+    const totalP = baseP + bonusP;
+    const remainP = p.isCurrent ? (totalP - usedP - deductP) : 0;
+
+    // 행: 기간 항목 + (정산 완료 기간이면 정산 row를 마지막에)
+    const rows = p.settlement ? [...entries, p.settlement] : entries;
+    const tbody = ledgerRowsHtml(staff, staffId, rows, baseP);
+
+    const badge = p.isCurrent
+      ? `<span class="lv-period-badge cur">진행중</span>`
+      : `<span class="lv-period-badge done">정산완료</span>`;
+    const rColor = remainP < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
+
+    return `
+      <div class="lv-period ${p.isCurrent ? 'open' : ''}" id="period-${idx}">
+        <div class="lv-period-header" onclick="togglePeriod(${idx})">
+          <div style="flex:1;min-width:0">
+            <div class="lv-period-range">${p.start} ~ ${p.isCurrent ? '현재' : p.end} ${badge}</div>
+            <div class="lv-period-sum">보유 ${fmtMin(totalP)} · 사용 ${fmtMin(usedP + deductP)} · 잔여 <span style="color:${rColor};font-weight:800">${fmtMinSigned(remainP)}</span></div>
+          </div>
+          <div class="lv-period-toggle">▾</div>
+        </div>
+        <div class="lv-period-body">
+          ${p.isCurrent ? `
+            <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--border)">
+              <button class="lh-action-btn" style="background:var(--accent-green-light);color:var(--accent-green);border:1.5px solid var(--accent-green)" onclick="openBonusModal('${staffId}')">🎁 포상 연차 추가</button>
+              <button class="lh-action-btn" style="background:var(--accent-red-light);color:var(--accent-red);border:1.5px solid var(--accent-red)" onclick="openDeductModal('${staffId}')">➖ 연차 차감</button>
+              <button class="lh-action-btn" style="background:var(--primary-light);color:var(--primary);border:1.5px solid var(--primary)" onclick="openSettleModal('${staffId}')">🧾 연차 정산</button>
+            </div>` : ''}
+          ${rows.length === 0
+            ? `<div class="lv-empty">내역이 없습니다</div>`
+            : `<div style="overflow-x:auto">
+              <table class="lv-history-table">
+                <thead><tr>
+                  <th style="width:36px">#</th><th>날짜</th><th>유형</th><th>차감/가산</th>
+                  <th>잔여시간</th><th>메모</th><th>연차신청서</th><th>관리</th>
+                </tr></thead>
+                <tbody>${tbody}</tbody>
+              </table></div>`}
+        </div>
+      </div>`;
+  }).reverse().join('');
 
   const detail = document.getElementById('lvDetail');
   detail.innerHTML = `
-    <!-- 상단 액션 바 -->
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <div style="font-size:13px;font-weight:700;color:var(--text-sub)">📊 ${staff.name} 연차 상세</div>
-      <button class="btn-primary" style="width:auto;padding:8px 16px" onclick="openSettleModal('${staffId}')">🧾 연차 정산</button>
-    </div>
+    <!-- 상단 타이틀 -->
+    <div style="font-size:13px;font-weight:700;color:var(--text-sub)">📊 ${staff.name} 연차 상세</div>
 
     <!-- 상단 요약 카드 -->
     <div class="lv-summary-row">
@@ -1377,116 +1550,10 @@ window.selectLeaveStaff = function(staffId) {
         style="width:100%;height:58px;margin-top:8px;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical">${safeMemo}</textarea>
     </div>
 
-    <!-- 이력 테이블 -->
-    <div class="lv-history-card">
-      <div class="lv-history-header">
-        <div class="lv-history-title">📅 연차 내역 (신청·포상·차감)</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-size:12px;color:var(--text-sub)">총 ${ledger.length}건</span>
-          <button class="lh-action-btn" style="background:var(--accent-green-light);color:var(--accent-green);border:1.5px solid var(--accent-green)" onclick="openBonusModal('${staffId}')">🎁 포상 연차 추가</button>
-          <button class="lh-action-btn" style="background:var(--accent-red-light);color:var(--accent-red);border:1.5px solid var(--accent-red)" onclick="openDeductModal('${staffId}')">➖ 연차 차감</button>
-        </div>
-      </div>
-      ${ledger.length === 0
-        ? `<div class="lv-empty">내역이 없습니다</div>`
-        : `<div style="overflow-x:auto">
-        <table class="lv-history-table">
-          <thead>
-            <tr>
-              <th style="width:36px">#</th>
-              <th>날짜</th>
-              <th>유형</th>
-              <th>차감/가산</th>
-              <th>잔여시간</th>
-              <th>메모</th>
-              <th>연차신청서</th>
-              <th>관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ledger.map((r, i) => {
-              let typeLabel, typeCls, amtCell, remainCell, actionHtml, docCell;
-
-              if (r.type === 'bonus') {
-                const amt = r.bonusMin || 0;
-                runMin += amt;
-                typeLabel = '🎁 포상'; typeCls = 'lh-bonus';
-                amtCell = `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(amt)}</span>`;
-                remainCell = fmtMinSigned(runMin);
-                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
-                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
-              } else if (r.type === 'deduct') {
-                const amt = r.deductMin || 0;
-                runMin -= amt;
-                typeLabel = '➖ 차감'; typeCls = 'lh-deduct';
-                amtCell = `<span style="color:var(--accent-red);font-weight:700">-${fmtMin(amt)}</span>`;
-                remainCell = fmtMinSigned(runMin);
-                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
-                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
-              } else if (r.type === 'settlement') {
-                const sm = r.settlementMin || 0; // 양수=잔여 줄임, 음수=잔여 늘림
-                runMin -= sm;
-                typeLabel = '🧾 정산'; typeCls = 'lh-settle';
-                amtCell = sm >= 0
-                  ? `<span style="color:var(--text-sub);font-weight:700">-${fmtMin(sm)}</span>`
-                  : `<span style="color:var(--accent-green);font-weight:700">+${fmtMin(-sm)}</span>`;
-                remainCell = fmtMinSigned(runMin); // 정산 후 0
-                actionHtml = `<button class="lh-action-btn lh-reject" onclick="deleteAdjReq('${r.id}','${staffId}')">🗑 삭제</button>`;
-                docCell = `<td style="text-align:center;color:var(--text-sub)">-</td>`;
-              } else {
-                // 연차 신청
-                let dm = 0;
-                if (r.status === 'approved') {
-                  if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
-                    const [sh,sm] = r.startTime.split(':').map(Number);
-                    const [eh,em] = r.endTime.split(':').map(Number);
-                    dm = (eh*60+em) - (sh*60+sm);
-                  } else {
-                    dm = (r.leaveAmount || 1) * getDeductMin(r.date, staff.type);
-                  }
-                  runMin -= dm;
-                }
-                typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
-                typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
-                amtCell = r.status === 'approved' ? `<span style="color:var(--accent-orange);font-weight:700">-${fmtMin(dm)}</span>` : '-';
-                remainCell = r.status === 'approved' ? fmtMinSigned(runMin) : '-';
-                const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
-                const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
-                if (r.status === 'pending') {
-                  actionHtml = `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
-                     <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`;
-                } else if (r.status === 'approved') {
-                  actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                     <span class="lh-status ${stClass}">${stLabel}</span>
-                     <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">반려로 변경</button>
-                     <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
-                   </div>`;
-                } else {
-                  actionHtml = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                     <span class="lh-status ${stClass}">${stLabel}</span>
-                     <button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">승인으로 변경</button>
-                     <button class="lh-action-btn" style="background:var(--bg);color:var(--text-sub);border:1.5px solid var(--border)" onclick="approveLeave('${r.id}','pending','${staffId}')">대기로 변경</button>
-                   </div>`;
-                }
-                docCell = `<td style="text-align:center;font-size:16px;cursor:pointer" onclick="toggleDoc('${r.id}','${staffId}')" title="클릭하여 작성여부 토글">${r.docSubmitted ? '✅' : '☐'}</td>`;
-              }
-
-              return `
-                <tr>
-                  <td style="color:var(--text-sub);font-size:11px">${i+1}</td>
-                  <td style="font-weight:700;white-space:nowrap">${r.date || '-'}</td>
-                  <td><span class="lh-type-badge ${typeCls}">${typeLabel}</span></td>
-                  <td style="font-weight:700">${amtCell}</td>
-                  <td style="font-size:12px;color:var(--text-sub)">${remainCell}</td>
-                  <td style="font-size:12px;color:var(--text-sub);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.memo||'-'}</td>
-                  ${docCell}
-                  <td>${actionHtml}</td>
-                </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-        </div>`
-      }
+    <!-- 기간별 연차 내역 (정산 기준 아코디언) -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:14px;font-weight:800">📅 기간별 연차 내역</div>
+      ${periodsHtml}
     </div>`;
 };
 
@@ -1691,11 +1758,20 @@ window.submitSettle = async function() {
   const date = new Date().toISOString().slice(0,10);
   const settleKind = remainMin > 0 ? '급여 지급 정산' : remainMin < 0 ? '급여 차감 정산' : '정산';
 
-  // 1) 정산: 잔여를 0으로 (settlementMin = 현재 잔여)
-  // 2) 포상: 새 연차 부여
+  // 현재기 시작 = 마지막 정산의 periodEnd, 없으면 입사일 → 이번 정산으로 기간 마감
+  const prevSettles = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'settlement' && r.status === 'approved')
+    .sort((a, b) => ((a.periodEnd || a.date || '') < (b.periodEnd || b.date || '')) ? -1 : 1);
+  const periodStart = prevSettles.length
+    ? (prevSettles[prevSettles.length - 1].periodEnd || prevSettles[prevSettles.length - 1].date)
+    : (staff.joinDate || date);
+  const periodEnd = date;
+
+  // 1) 정산: 잔여를 0으로 (settlementMin = 현재 잔여), 기간 [periodStart, periodEnd] 마감
+  // 2) 포상: 새 연차 부여 (다음 기간 시작)
   const docs = [
     { type:'settlement', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
-      settlementMin: remainMin,
+      settlementMin: remainMin, periodStart, periodEnd,
       memo: `${settleKind} · 잔여 ${fmtMinSigned(remainMin)} → 0${memo ? ' · ' + memo : ''}`,
       createdAt: serverTimestamp() },
     { type:'bonus', status:'approved', staffName:staff.name, staffTeam:staff.team, date,
