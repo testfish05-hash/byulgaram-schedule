@@ -455,6 +455,58 @@
     flex: 1; color: var(--text-sub); gap: 8px;
   }
   .lv-placeholder-icon { font-size: 40px; opacity: 0.3; }
+
+  /* ── 연차 제한 달력 ── */
+  #tlCalDays .cal-day { min-height: 96px; }
+  .tl-chips { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+  .tl-chip {
+    font-size: 10px; font-weight: 700;
+    padding: 2px 5px; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: var(--bg); color: var(--text-sub); border: 1px solid var(--border);
+  }
+  .tl-chip.full { background: var(--accent-red-light); color: var(--accent-red); border-color: var(--accent-red); }
+  .tl-chip.custom { background: #FFF7E6; border-color: var(--accent-orange); color: var(--accent-orange); }
+  .tl-chip.custom.full { background: var(--accent-red-light); color: var(--accent-red); border-color: var(--accent-red); }
+
+  /* ── 연차 제한 모달 ── */
+  .tl-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 800; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .tl-modal {
+    background: var(--surface); border-radius: 16px;
+    width: 100%; max-width: 420px; max-height: 86vh; overflow: hidden;
+    display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  }
+  .tl-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .tl-modal-title { font-size: 16px; font-weight: 800; }
+  .tl-modal-x { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--bg); font-size: 15px; cursor: pointer; }
+  .tl-modal-body { padding: 10px 20px; overflow-y: auto; }
+  .tl-modal-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .tl-modal-row:last-child { border-bottom: none; }
+  .tl-modal-team { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .tl-custom-tag { font-size: 10px; font-weight: 700; color: var(--accent-orange); background: #FFF7E6; padding: 1px 6px; border-radius: 10px; }
+  .tl-modal-cur { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .tl-stepper { display: flex; align-items: center; gap: 8px; }
+  .tl-stepper button {
+    width: 28px; height: 28px; border: 1.5px solid var(--border); border-radius: 7px;
+    background: var(--surface); cursor: pointer; font-size: 15px; font-weight: 700;
+  }
+  .tl-stepper button:hover { border-color: var(--primary); color: var(--primary); }
+  .tl-stepper > span { font-size: 18px; font-weight: 800; min-width: 26px; text-align: center; color: var(--primary); }
+  .tl-stepper > span.over { color: var(--accent-red); }
+  .tl-stepper .tl-unit { font-size: 11px; font-weight: 600; color: var(--text-sub); min-width: auto; }
+  .tl-modal-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -649,27 +701,46 @@
       </div>
     </div>
 
-    <!-- 팀 인원 제한 페이지 -->
+    <!-- 연차 제한 페이지 (달력형) -->
     <div id="page-teamlimit" class="hidden">
-      <div class="page-header" style="margin-bottom:20px">
+      <div class="page-header" style="margin-bottom:16px">
         <div>
-          <div class="page-title">팀 인원 제한 설정</div>
-          <div class="page-sub">날짜별 팀당 최대 연차 신청 가능 인원을 설정하세요. 초과 시 직원의 신청이 차단됩니다.</div>
+          <div class="page-title">연차 제한 관리</div>
+          <div class="page-sub">날짜를 클릭해 팀별 연차 신청 가능 인원을 조정하세요. 설정이 없는 날은 기본 규칙(진료팀A·B/데스크A·B는 수요일 2명·그 외 1명, 나머지 팀은 1명)이 적용됩니다.</div>
         </div>
       </div>
 
-      <!-- 팀 목록 + 제한 설정 -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:28px" id="teamLimitCards">
-        <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
+      <div class="calendar-header">
+        <div class="cal-nav" onclick="tlChangeMonth(-1)">‹</div>
+        <div class="cal-month" id="tlMonthLabel"></div>
+        <div class="cal-nav" onclick="tlChangeMonth(1)">›</div>
+        <div style="margin-left:16px;display:flex;gap:14px;font-size:12px;color:var(--text-sub)">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--accent-red-light);border:1px solid var(--accent-red)"></span> 마감</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#FFF7E6;border:1px solid var(--accent-orange)"></span> 커스텀 설정</span>
+        </div>
       </div>
+      <div class="calendar-grid">
+        <div class="cal-weekdays">
+          <div class="cal-wd">일</div><div class="cal-wd">월</div><div class="cal-wd">화</div>
+          <div class="cal-wd">수</div><div class="cal-wd">목</div><div class="cal-wd">금</div><div class="cal-wd">토</div>
+        </div>
+        <div class="cal-days" id="tlCalDays"></div>
+      </div>
+    </div>
 
-      <!-- 날짜별 현황 미리보기 -->
-      <div class="page-title" style="font-size:16px;margin-bottom:12px">📅 날짜별 팀 현황 미리보기</div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <input type="date" class="form-input" id="tlPreviewDate" style="width:180px" onchange="renderTeamLimitPreview()">
-        <span style="font-size:13px;color:var(--text-sub)">날짜 선택 시 팀별 신청 현황 확인</span>
+    <!-- 연차 제한 조정 모달 -->
+    <div id="tlModal" class="tl-modal-overlay hidden" onclick="closeTlModal(event)">
+      <div class="tl-modal">
+        <div class="tl-modal-header">
+          <div class="tl-modal-title" id="tlModalTitle">연차 제한 설정</div>
+          <button class="tl-modal-x" onclick="closeTlModalForce()">✕</button>
+        </div>
+        <div class="tl-modal-body" id="tlModalBody"></div>
+        <div class="tl-modal-footer">
+          <button class="btn-edit" onclick="resetTlDate()">↺ 기본값으로 초기화</button>
+          <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="closeTlModalForce()">완료</button>
+        </div>
       </div>
-      <div id="tlPreviewBody"></div>
     </div>
 
     <!-- 팀 관리 페이지 -->
@@ -727,14 +798,18 @@ const db = getFirestore(app);
 // ─── 상태 ───
 let allRequests = [];
 let allStaff = [];
-let teamLimits = {}; // { '진료팀': 2, '데스크팀': 1, ... }
+let teamLimits = {}; // (구) 팀별 제한 - team_list 마이그레이션 호환용으로만 유지
 let teamList = [];   // [{ id, name, order }] - team_list 컬렉션
+let dateLimits = {}; // { 'YYYY-MM-DD': { '팀명': 연차제한수 } } - date_limits 컬렉션
 let calYear, calMonth;
+let tlYear, tlMonth, tlModalDate = '';
 let editingStaff = {};
 
 const now = new Date();
 calYear = now.getFullYear();
 calMonth = now.getMonth();
+tlYear = now.getFullYear();
+tlMonth = now.getMonth();
 
 // ─── 유틸 ───
 window.showToast = function(msg) {
@@ -769,16 +844,14 @@ window.doLogout = function() {
 };
 
 async function initAdmin() {
-  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits()]);
+  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits(), loadDateLimits()]);
   await loadTeamList();
   renderCalendar();
   renderLeaveTable();
   renderStaffGrid();
-  renderTeamLimitCards();
+  renderTeamLimitCalendar();
   updateStats();
   document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
-  document.getElementById('tlPreviewDate').value = new Date().toISOString().slice(0,10);
-  renderTeamLimitPreview();
 }
 
 // ─── 데이터 로드 ───
@@ -876,7 +949,7 @@ window.showPage = function(page) {
   });
   document.getElementById(`page-${page}`)?.classList.remove('hidden');
   document.getElementById(`nav-${page}`)?.classList.add('active');
-  if (page === 'teamlimit') renderTeamLimitCards();
+  if (page === 'teamlimit') renderTeamLimitCalendar();
   if (page === 'teams') renderTeamsPage();
 };
 
@@ -1285,106 +1358,149 @@ function getTeamNames() {
   return [...new Set([...fromStaff, ...fromLimits])];
 }
 
-function renderTeamLimitCards() {
-  const container = document.getElementById('teamLimitCards');
+// ─── 연차 기본 제한 규칙 (하드코딩) ───
+// 진료팀A·진료팀B·데스크A·데스크B: 수요일 2명 / 그 외 요일 1명
+// 그 외 모든 팀: 요일 관계없이 1명
+const WED_SPECIAL_TEAMS = ['진료팀A', '진료팀B', '데스크A', '데스크B'];
+
+function defaultLeaveLimit(team, dateStr) {
+  if (WED_SPECIAL_TEAMS.includes(team)) {
+    const dow = new Date(dateStr + 'T00:00:00').getDay(); // 3 = 수요일
+    return dow === 3 ? 2 : 1;
+  }
+  return 1;
+}
+
+// 해당 날짜+팀의 실제 적용 제한 (커스텀 우선, 없으면 기본 규칙)
+function effectiveLeaveLimit(team, dateStr) {
+  const custom = dateLimits[dateStr];
+  if (custom && custom[team] != null) return custom[team];
+  return defaultLeaveLimit(team, dateStr);
+}
+
+// ─── date_limits 로드 ───
+async function loadDateLimits() {
+  try {
+    const snap = await getDocs(collection(db, 'date_limits'));
+    dateLimits = {};
+    snap.forEach(d => { dateLimits[d.id] = d.data(); });
+  } catch {
+    dateLimits = {};
+  }
+}
+
+// ─── 연차 제한 달력 렌더 ───
+window.tlChangeMonth = function(dir) {
+  tlMonth += dir;
+  if (tlMonth > 11) { tlMonth = 0; tlYear++; }
+  if (tlMonth < 0)  { tlMonth = 11; tlYear--; }
+  renderTeamLimitCalendar();
+};
+
+function renderTeamLimitCalendar() {
+  document.getElementById('tlMonthLabel').textContent = `${tlYear}년 ${tlMonth+1}월`;
+  const firstDay = new Date(tlYear, tlMonth, 1).getDay();
+  const daysInMonth = new Date(tlYear, tlMonth+1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
   const teams = getTeamNames();
-  if (!teams.length) { container.innerHTML = '<div style="color:var(--text-sub);padding:20px">직원 데이터를 먼저 등록하세요</div>'; return; }
+  const container = document.getElementById('tlCalDays');
+  container.innerHTML = '';
 
-  // 팀 색상 맵
-  const colors = ['var(--primary)','var(--accent-green)','var(--accent-purple)','var(--accent-orange)','#E53E3E','#0891B2'];
+  for (let i = 0; i < firstDay; i++) container.innerHTML += '<div class="cal-day empty"></div>';
 
-  container.innerHTML = teams.map((team, idx) => {
-    const lim = teamLimits[team] || { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
-    const memberCount = allStaff.filter(s => s.team === team).length;
-    const color = colors[idx % colors.length];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${tlYear}-${String(tlMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(tlYear, tlMonth, d).getDay();
+    const isToday = dateStr === todayStr;
+    const cls = ['cal-day', dow===0?'sun':'', dow===6?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
+
+    const dayLeaves = allRequests.filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected');
+    const chips = teams.map(team => {
+      const cur = dayLeaves.filter(r => r.staffTeam === team).length;
+      const limit = effectiveLeaveLimit(team, dateStr);
+      const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
+      const full = cur >= limit;
+      const short = team.replace('팀', '');
+      return `<div class="tl-chip ${full ? 'full' : ''} ${isCustom ? 'custom' : ''}">${short} ${cur}/${limit}</div>`;
+    }).join('');
+
+    container.innerHTML += `
+      <div class="${cls}" onclick="openTlModal('${dateStr}')">
+        <div class="cal-day-num">${d}</div>
+        <div class="tl-chips">${chips}</div>
+      </div>`;
+  }
+}
+
+// ─── 날짜 클릭 → 제한 조정 모달 ───
+window.openTlModal = function(dateStr) {
+  tlModalDate = dateStr;
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  document.getElementById('tlModalTitle').textContent = `${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) 연차 제한`;
+  renderTlModalBody();
+  document.getElementById('tlModal').classList.remove('hidden');
+};
+
+function renderTlModalBody() {
+  const dateStr = tlModalDate;
+  const teams = getTeamNames();
+  const body = document.getElementById('tlModalBody');
+  if (!teams.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sub)">등록된 팀이 없습니다</div>'; return; }
+  const dayLeaves = allRequests.filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected');
+
+  body.innerHTML = teams.map(team => {
+    const cur = dayLeaves.filter(r => r.staffTeam === team).length;
+    const limit = effectiveLeaveLimit(team, dateStr);
+    const isCustom = dateLimits[dateStr] && dateLimits[dateStr][team] != null;
     return `
-      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border-top:3px solid ${color}">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <div style="width:36px;height:36px;border-radius:10px;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800">${team[0]}</div>
-          <div>
-            <div style="font-size:15px;font-weight:800">${team}</div>
-            <div style="font-size:12px;color:var(--text-sub)">${memberCount}명</div>
-          </div>
+      <div class="tl-modal-row">
+        <div>
+          <div class="tl-modal-team">${team}${isCustom ? '<span class="tl-custom-tag">커스텀</span>' : ''}</div>
+          <div class="tl-modal-cur">현재 신청 ${cur}명</div>
         </div>
-        <div style="display:grid;gap:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--primary-light);border-radius:8px">
-            <span style="font-size:13px;font-weight:700;color:var(--primary)">🌴 연차 최대</span>
-            <div style="display:flex;align-items:center;gap:8px">
-              <button onclick="adjustLimit('${team}','maxLeave',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
-              <span id="lim-${team}-maxLeave" style="font-size:18px;font-weight:800;color:var(--primary);min-width:28px;text-align:center">${lim.maxLeave >= 99 ? '∞' : lim.maxLeave}</span>
-              <button onclick="adjustLimit('${team}','maxLeave',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
-              <span style="font-size:11px;color:var(--text-sub)">명</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--accent-green-light);border-radius:8px">
-            <span style="font-size:13px;font-weight:700;color:var(--accent-green)">⏰ 추가근무 최대</span>
-            <div style="display:flex;align-items:center;gap:8px">
-              <button onclick="adjustLimit('${team}','maxExtra',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
-              <span id="lim-${team}-maxExtra" style="font-size:18px;font-weight:800;color:var(--accent-green);min-width:28px;text-align:center">${lim.maxExtra >= 99 ? '∞' : lim.maxExtra}</span>
-              <button onclick="adjustLimit('${team}','maxExtra',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
-              <span style="font-size:11px;color:var(--text-sub)">명</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--accent-purple-light);border-radius:8px">
-            <span style="font-size:13px;font-weight:700;color:var(--accent-purple)">🔄 근무교체 최대</span>
-            <div style="display:flex;align-items:center;gap:8px">
-              <button onclick="adjustLimit('${team}','maxSwap',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
-              <span id="lim-${team}-maxSwap" style="font-size:18px;font-weight:800;color:var(--accent-purple);min-width:28px;text-align:center">${lim.maxSwap >= 99 ? '∞' : lim.maxSwap}</span>
-              <button onclick="adjustLimit('${team}','maxSwap',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
-              <span style="font-size:11px;color:var(--text-sub)">명</span>
-            </div>
-          </div>
+        <div class="tl-stepper">
+          <button onclick="adjustDateLimit('${team}',-1)">−</button>
+          <span class="${cur > limit ? 'over' : ''}">${limit}</span>
+          <button onclick="adjustDateLimit('${team}',1)">+</button>
+          <span class="tl-unit">명</span>
         </div>
       </div>`;
   }).join('');
 }
 
-window.adjustLimit = async function(team, field, delta) {
-  if (!teamLimits[team]) teamLimits[team] = { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
-  const cur = teamLimits[team][field];
-  // 99 = 무제한, 1 이상
-  let next = cur >= 99 ? (delta > 0 ? 99 : 5) : Math.max(0, cur + delta);
-  if (next > 98) next = 99; // 99 = ∞
-  teamLimits[team][field] = next;
-  const el = document.getElementById(`lim-${team}-${field}`);
-  if (el) el.textContent = next >= 99 ? '∞' : next;
+// 특정 날짜+팀 제한 +1/-1 (커스텀으로 저장)
+window.adjustDateLimit = async function(team, delta) {
+  const dateStr = tlModalDate;
+  const base = effectiveLeaveLimit(team, dateStr);
+  let next = Math.max(0, base + delta);
+  if (next > 20) next = 20;
+  if (!dateLimits[dateStr]) dateLimits[dateStr] = {};
+  dateLimits[dateStr][team] = next;
   try {
-    await setDoc(doc(db, 'team_limits', team), teamLimits[team]);
+    await setDoc(doc(db, 'date_limits', dateStr), dateLimits[dateStr]);
   } catch {}
-  showToast(`✅ ${team} ${field === 'maxLeave' ? '연차' : field === 'maxExtra' ? '추가근무' : '근무교체'} 제한: ${next >= 99 ? '무제한' : next + '명'}`);
+  renderTlModalBody();
+  renderTeamLimitCalendar();
 };
 
-// ─── 날짜별 팀 현황 미리보기 ───
-window.renderTeamLimitPreview = function() {
-  const date = document.getElementById('tlPreviewDate').value;
-  const body = document.getElementById('tlPreviewBody');
-  if (!date) { body.innerHTML = ''; return; }
+// 해당 날짜 커스텀 제한 제거 → 기본 규칙으로 복귀
+window.resetTlDate = async function() {
+  const dateStr = tlModalDate;
+  delete dateLimits[dateStr];
+  try {
+    await deleteDoc(doc(db, 'date_limits', dateStr));
+  } catch {}
+  renderTlModalBody();
+  renderTeamLimitCalendar();
+  showToast('↺ 기본값으로 초기화되었습니다');
+};
 
-  const teams = getTeamNames();
-  const dayReqs = allRequests.filter(r => r.date === date);
-
-  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">` +
-    teams.map(team => {
-      const lim = teamLimits[team] || { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
-      const leaveCount = dayReqs.filter(r => r.staffTeam === team && r.type === 'leave' && r.status !== 'rejected').length;
-      const extraCount = dayReqs.filter(r => r.staffTeam === team && r.type === 'extra' && r.status !== 'rejected').length;
-      const swapCount  = dayReqs.filter(r => r.staffTeam === team && r.type === 'swap'  && r.status !== 'rejected').length;
-
-      const row = (icon, label, cur, max, color) => {
-        const full = max < 99 && cur >= max;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:7px;background:${full ? '#FEE2E2' : 'var(--bg)'}">
-          <span style="font-size:12px;font-weight:700;color:${full ? 'var(--accent-red)' : color}">${icon} ${label}</span>
-          <span style="font-size:13px;font-weight:800;color:${full ? 'var(--accent-red)' : color}">${cur}/${max >= 99 ? '∞' : max}${full ? ' 🚫' : ''}</span>
-        </div>`;
-      };
-
-      return `<div style="background:var(--surface);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)">
-        <div style="font-size:14px;font-weight:800;margin-bottom:10px">${team}</div>
-        ${row('🌴','연차', leaveCount, lim.maxLeave, 'var(--primary)')}
-        ${row('⏰','추가근무', extraCount, lim.maxExtra, 'var(--accent-green)')}
-        ${row('🔄','근무교체', swapCount, lim.maxSwap, 'var(--accent-purple)')}
-      </div>`;
-    }).join('') + '</div>';
+window.closeTlModal = function(e) {
+  if (e.target === document.getElementById('tlModal')) closeTlModalForce();
+};
+window.closeTlModalForce = function() {
+  document.getElementById('tlModal').classList.add('hidden');
 };
 
 // ─── 팀 관리 ───
