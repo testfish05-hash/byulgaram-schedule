@@ -821,11 +821,15 @@ function renderCalendar() {
         : r.status === 'rejected'
         ? `cal-chip chip-rejected${mine}`
         : `cal-chip chip-pending${mine}`;
-      return `<span class="${cls}">${icon}${r.staffName}</span>`;
+      return `<span class="${cls}">${icon}${r.staffName}(${r.staffTeam})</span>`;
     }
 
-    // 신청자 이름을 세로로 한명씩 모두 나열 (좌: 연차+교체 / 우: 추가근무)
-    const leftChips  = leftReqs.map(makeChip).join('');
+    // 좌측: 연차(상단) → 가로 구분선 → 근무교체(하단) / 우측: 추가근무
+    const leaveReqs = dayReqs.filter(r => r.type === 'leave');
+    const swapReqs  = dayReqs.filter(r => r.type === 'swap');
+    const leaveSwapDivider = (leaveReqs.length > 0 && swapReqs.length > 0)
+      ? `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>` : '';
+    const leftChips  = leaveReqs.map(makeChip).join('') + leaveSwapDivider + swapReqs.map(makeChip).join('');
     const rightChips = rightReqs.map(makeChip).join('');
     const leftMore = '', rightMore = '';
 
