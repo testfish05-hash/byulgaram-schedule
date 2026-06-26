@@ -196,11 +196,27 @@
     white-space: nowrap;
     overflow: hidden; max-width: 100%;
     text-overflow: ellipsis;
+    display: block; line-height: 1.5;
   }
   .chip-leave { background: var(--primary-light); color: var(--primary); }
   .chip-extra { background: var(--accent-green-light); color: var(--accent-green); }
   .chip-swap { background: var(--accent-purple-light); color: var(--accent-purple); }
-  .chip-pending { opacity: 0.6; }
+  /* 상태별: 검토중=빨강 / 반려=회색 취소선 */
+  .chip-pending { background: #FECACA !important; color: #B91C1C !important; }
+  .chip-rejected { background: #E5E7EB !important; color: #9CA3AF !important; text-decoration: line-through; }
+
+  /* 달력 칸 좌/우 컬럼 + 상단 배지 */
+  .cal-day-header { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; margin-bottom: 3px; }
+  .cal-day-header .cal-day-num { margin-bottom: 0; }
+  .cal-team-badge {
+    font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 3px;
+    white-space: nowrap; line-height: 1.5;
+  }
+  .cal-team-badge.full { background: var(--accent-red-light); color: var(--accent-red); }
+  .cal-team-badge.ok   { background: var(--bg); color: var(--text-sub); border: 1px solid var(--border); }
+  .cal-cols { display: flex; gap: 2px; }
+  .cal-col-left  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .cal-col-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 
   /* 날짜별 목록 */
   .date-list-header {
@@ -1193,17 +1209,49 @@ function renderCalendar() {
     const isToday = dateStr === todayStr;
     const cls = ['cal-day', isSun?'sun':'', isSat?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
 
-    const chips = dayReqs.slice(0,4).map(r => {
-      const cls2 = r.type === 'leave' ? 'chip-leave' : r.type === 'extra' ? 'chip-extra' : 'chip-swap';
-      const pnd = r.status === 'pending' ? 'chip-pending' : '';
-      const lbl = r.type === 'leave' ? `🌴${r.staffName}` : r.type === 'extra' ? `⏰${r.staffName}` : `🔄${r.staffName}`;
-      return `<div class="cal-chip ${cls2} ${pnd}">${lbl}</div>`;
+    function makeChip(r) {
+      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : 'chip-swap';
+      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : '🔄';
+      // pending=빨강, approved=유형색, rejected=회색 취소선
+      const c = r.status === 'approved' ? `cal-chip ${typeClass}`
+        : r.status === 'rejected' ? 'cal-chip chip-rejected'
+        : 'cal-chip chip-pending';
+      return `<div class="${c}">${icon}${r.staffName}(${r.staffTeam})</div>`;
+    }
+
+    // 좌측: 연차(상단) → 가로 구분선 → 교체(하단) / 우측: 추가근무
+    const leaveReqs = dayReqs.filter(r => r.type === 'leave');
+    const swapReqs  = dayReqs.filter(r => r.type === 'swap');
+    const extraReqs = dayReqs.filter(r => r.type === 'extra');
+    const leaveSwapDivider = (leaveReqs.length && swapReqs.length)
+      ? `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>` : '';
+    const leftChips = leaveReqs.map(makeChip).join('') + leaveSwapDivider + swapReqs.map(makeChip).join('');
+    const rightChips = extraReqs.map(makeChip).join('');
+    const colsDivider = ((leaveReqs.length || swapReqs.length) && extraReqs.length)
+      ? `<div style="width:1px;background:#E2E8F0;flex-shrink:0;margin-top:2px"></div>` : '';
+
+    // 날짜 상단 팀별(풀) 카운트 배지 (연차 기준)
+    const groupKeys = [...new Set(allRequests
+      .filter(r => r.date === dateStr && r.type === 'leave' && r.status !== 'rejected')
+      .map(r => poolKeyOf(r.staffTeam)))];
+    const teamCountBadges = groupKeys.map(key => {
+      const cnt = groupLeaveCount(dateStr, key);
+      const max = groupLimit(dateStr, key);
+      const full = cnt >= max;
+      return `<span class="cal-team-badge ${full ? 'full' : 'ok'}">${groupLabel(key)}${cnt}/${max}</span>`;
     }).join('');
 
     container.innerHTML += `
       <div class="${cls}" onclick="openDayDetail('${dateStr}')">
-        <div class="cal-day-num">${d}</div>
-        <div class="cal-chips">${chips}</div>
+        <div class="cal-day-header">
+          <div class="cal-day-num">${d}</div>
+          ${teamCountBadges}
+        </div>
+        <div class="cal-cols">
+          <div class="cal-col-left">${leftChips}</div>
+          ${colsDivider}
+          <div class="cal-col-right">${rightChips}</div>
+        </div>
       </div>`;
   }
 }
@@ -1244,7 +1292,10 @@ function renderRequestCol(colId, reqs) {
       : `↔ ${r.swapTarget}`;
 
     let statusHtml;
-    if (r.status === 'pending') {
+    if (r.type === 'swap') {
+      // 근무교체는 자동승인 — 승인/반려 버튼 없이 배지만 표시
+      statusHtml = `<span class="status-badge approved-badge">⚡ 자동승인</span>`;
+    } else if (r.status === 'pending') {
       statusHtml = `<div class="req-actions">
           <button class="btn-approve" onclick="updateStatus('${r.id}','approved')">O 승인</button>
           <button class="btn-reject" onclick="updateStatus('${r.id}','rejected')">X 반려</button>

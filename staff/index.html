@@ -461,11 +461,33 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
   </div><!-- /modal-sheet -->
 </div><!-- /modal-overlay -->
 
+<!-- ══ 교체 신청 수정 모달 ══ -->
+<div class="modal-overlay" id="editSwapModal" onclick="closeEditSwap(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🔄 근무교체 수정</div>
+      <button class="modal-close" onclick="closeEditSwapForce()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <label class="fl">교체 상대</label>
+        <select class="fs" id="editSwapTarget"><option value="">직원 선택...</option></select>
+      </div>
+      <div class="fg">
+        <label class="fl">메모</label>
+        <textarea class="fta" id="editSwapMemo" placeholder="교체 사유 및 세부 내용"></textarea>
+      </div>
+      <button class="btn-submit btn-swap-c" onclick="saveEditSwap()">수정 저장</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, getDocs, addDoc, query, where, orderBy, serverTimestamp, onSnapshot }
+import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, serverTimestamp, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -1043,6 +1065,7 @@ window.submitModal = async function(type) {
     if (!target) { showToast('교체 상대를 선택해주세요'); return; }
     data.swapTarget = target;
     data.memo = document.getElementById('fpSwapMemo').value;
+    data.status = 'approved'; // 근무교체는 관리자 승인 없이 자동승인
   }
 
   try {
@@ -1095,17 +1118,82 @@ function renderHistItem(r) {
   const bc = r.type==='extra'?'badge-extra':r.type==='leave'?'badge-leave':'badge-swap';
   const tl = r.type==='extra'?'추가근무':r.type==='leave'?'연차':'근무교체';
   const sc = r.status==='approved'?'st-approved':r.status==='rejected'?'st-rejected':'st-pending';
-  const sl = r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중';
+  const sl = r.type==='swap' ? '⚡ 자동승인' : (r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중');
   let detail = r.date||'';
   if (r.type==='extra') detail += ` · ${r.startTime}~${r.endTime}`;
   else if (r.type==='leave') detail += ` · ${r.leaveSubType==='all'?'종일':(r.startTime+'~'+r.endTime)}`;
   else if (r.type==='swap') detail += ` · ↔${r.swapTarget}`;
+
+  // 수정: 교체만 / 취소: 검토중(pending) 또는 교체(approved 여도 가능)
+  const canEdit = r.type === 'swap';
+  const canCancel = r.status === 'pending' || r.type === 'swap';
+  let actions = '';
+  if (canEdit || canCancel) {
+    const btn = 'font-size:11px;font-weight:700;border-radius:7px;padding:5px 9px;cursor:pointer;border:1.5px solid';
+    actions = `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">`;
+    if (canEdit)   actions += `<button onclick="openEditSwap('${r.id}')" style="${btn} var(--purple);background:var(--purple-light);color:var(--purple)">수정</button>`;
+    if (canCancel) actions += `<button onclick="cancelMyReq('${r.id}')" style="${btn} var(--red);background:var(--red-light);color:var(--red)">취소</button>`;
+    actions += `</div>`;
+  }
+
   div.innerHTML = `
     <span class="h-badge ${bc}">${tl}</span>
     <div class="h-info"><div class="h-date">${detail}</div><div class="h-detail">${r.memo||''}</div></div>
-    <span class="h-status ${sc}">${sl}</span>`;
+    <span class="h-status ${sc}">${sl}</span>
+    ${actions}`;
   return div;
 }
+
+// ── 교체 신청 수정 ──
+let editSwapId = null;
+window.openEditSwap = function(id) {
+  const r = allRequests.find(x => x.id === id);
+  if (!r) { showToast('내역을 찾을 수 없습니다'); return; }
+  editSwapId = id;
+  const sel = document.getElementById('editSwapTarget');
+  sel.innerHTML = '<option value="">직원 선택...</option>' +
+    allStaff.filter(s => s.name !== currentUser?.name)
+      .map(s => `<option value="${s.name}" ${s.name === r.swapTarget ? 'selected' : ''}>[${s.team}] ${s.name}</option>`).join('');
+  document.getElementById('editSwapMemo').value = r.memo || '';
+  document.getElementById('editSwapModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+window.closeEditSwap = e => { if (e.target === document.getElementById('editSwapModal')) closeEditSwapForce(); };
+window.closeEditSwapForce = () => {
+  document.getElementById('editSwapModal').classList.remove('open');
+  document.body.style.overflow = '';
+};
+window.saveEditSwap = async function() {
+  if (!editSwapId) return;
+  const target = document.getElementById('editSwapTarget').value;
+  if (!target) { showToast('교체 상대를 선택해주세요'); return; }
+  const memo = document.getElementById('editSwapMemo').value;
+  try {
+    await updateDoc(doc(db, 'schedule_requests', editSwapId), { swapTarget: target, memo });
+    const r = allRequests.find(x => x.id === editSwapId);
+    if (r) { r.swapTarget = target; r.memo = memo; }
+    showToast('✅ 수정되었습니다');
+    closeEditSwapForce();
+    renderCalendar();
+    loadHistory();
+  } catch(e) { console.error(e); showToast('❌ 수정 실패'); }
+};
+
+// ── 신청 취소(삭제) ──
+window.cancelMyReq = async function(id) {
+  const r = allRequests.find(x => x.id === id);
+  if (!r) { showToast('내역을 찾을 수 없습니다'); return; }
+  if (!confirm('이 신청을 취소(삭제)하시겠습니까?')) return;
+  try {
+    await deleteDoc(doc(db, 'schedule_requests', id));
+    const i = allRequests.findIndex(x => x.id === id);
+    if (i >= 0) allRequests.splice(i, 1);
+    showToast('🗑 신청이 취소되었습니다');
+    renderCalendar();
+    await loadUserLeave();
+    loadHistory();
+  } catch(e) { console.error(e); showToast('❌ 취소 실패'); }
+};
 
 // ── 초기화 ──
 loadStaff();
