@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>별가람 근무 관리 · 관리자</title>
+<style>
+  :root {
+    --bg: #F0F4FA;
+    --surface: #FFFFFF;
+    --primary: #3B6FD4;
+    --primary-light: #EBF0FB;
+    --primary-dark: #2A55B0;
+    --accent-green: #22A66B;
+    --accent-green-light: #E6F7F1;
+    --accent-red: #E53E3E;
+    --accent-red-light: #FEE2E2;
+    --accent-orange: #E87722;
+    --accent-orange-light: #FEF1E6;
+    --accent-purple: #7C4DFF;
+    --accent-purple-light: #EDE7FF;
+    --sidebar: #1A1D2E;
+    --sidebar-active: #2D3148;
+    --text: #1A1D2E;
+    --text-sub: #6B7280;
+    --border: #E2E8F0;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* 로그인 */
+  .login-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--sidebar);
+  }
+  .login-card {
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 40px 32px;
+    width: 100%; max-width: 360px;
+    text-align: center;
+  }
+  .login-icon { font-size: 36px; margin-bottom: 16px; }
+  .login-title { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+  .login-sub { font-size: 13px; color: var(--text-sub); margin-bottom: 24px; }
+  .form-input {
+    width: 100%; padding: 12px 14px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    font-size: 15px; margin-bottom: 14px;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { outline: none; border-color: var(--primary); }
+  .btn-primary {
+    width: 100%; padding: 13px; background: var(--primary);
+    color: #fff; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+
+  /* 레이아웃 */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px; background: var(--sidebar);
+    padding: 24px 16px;
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; bottom: 0;
+    z-index: 100;
+  }
+  .sidebar-brand { color: #fff; font-size: 16px; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.3px; }
+  .sidebar-sub { color: rgba(255,255,255,0.45); font-size: 11px; margin-bottom: 28px; }
+  .sidebar-section { font-size: 10px; color: rgba(255,255,255,0.35); font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; padding-left: 12px; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: rgba(255,255,255,0.65);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 2px;
+  }
+  .sidebar-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .sidebar-item.active { background: var(--primary); color: #fff; }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-logout {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    color: rgba(255,255,255,0.4);
+    font-size: 12px; cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.15s;
+  }
+  .sidebar-logout:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.06); }
+
+  .content { margin-left: 220px; padding: 28px; flex: 1; }
+  .page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .page-title { font-size: 22px; font-weight: 800; }
+  .page-sub { font-size: 13px; color: var(--text-sub); margin-top: 2px; }
+
+  /* 탭 */
+  .tab-bar {
+    display: flex; gap: 4px;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: var(--shadow);
+    margin-bottom: 24px;
+    width: fit-content;
+  }
+  .tab-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-sub);
+    transition: all 0.15s;
+  }
+  .tab-btn.active { background: var(--primary); color: #fff; }
+
+  /* 달력 */
+  .calendar-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .cal-nav {
+    width: 32px; height: 32px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px;
+    background: var(--surface);
+    transition: all 0.15s;
+  }
+  .cal-nav:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .cal-month { font-size: 18px; font-weight: 800; }
+  .calendar-grid {
+    background: var(--surface);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .cal-weekdays {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    background: var(--sidebar);
+  }
+  .cal-wd {
+    text-align: center; padding: 10px;
+    font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.6);
+    letter-spacing: 0.5px;
+  }
+  .cal-wd:first-child { color: #ff8080; }
+  .cal-wd:last-child { color: #80aaff; }
+  .cal-days {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+  }
+  .cal-day {
+    min-height: 90px; padding: 8px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .cal-day:hover { background: var(--primary-light); }
+  .cal-day.empty { background: #FAFBFD; cursor: default; }
+  .cal-day.today { background: #F0F6FF; }
+  .cal-day-num {
+    font-size: 13px; font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .cal-day.sun .cal-day-num { color: var(--accent-red); }
+  .cal-day.sat .cal-day-num { color: var(--primary); }
+  .cal-day.today .cal-day-num {
+    background: var(--primary); color: #fff;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cal-chips { display: flex; flex-wrap: wrap; gap: 2px; }
+  .cal-chip {
+    font-size: 10px; font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden; max-width: 100%;
+    text-overflow: ellipsis;
+  }
+  .chip-leave { background: var(--primary-light); color: var(--primary); }
+  .chip-extra { background: var(--accent-green-light); color: var(--accent-green); }
+  .chip-swap { background: var(--accent-purple-light); color: var(--accent-purple); }
+  .chip-pending { opacity: 0.6; }
+
+  /* 날짜별 목록 */
+  .date-list-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .date-input {
+    padding: 8px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .col-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .col-header {
+    padding: 14px 16px;
+    font-size: 13px; font-weight: 800;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-header.leave-h { color: var(--primary); border-bottom-color: var(--primary-light); background: var(--primary-light); }
+  .col-header.extra-h { color: var(--accent-green); border-bottom-color: var(--accent-green-light); background: var(--accent-green-light); }
+
+  .request-row {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .request-row:last-child { border-bottom: none; }
+  .req-info { flex: 1; }
+  .req-name { font-size: 14px; font-weight: 700; }
+  .req-detail { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .req-actions { display: flex; gap: 6px; }
+  .btn-approve {
+    padding: 5px 12px;
+    background: var(--accent-green-light);
+    color: var(--accent-green);
+    border: 1.5px solid var(--accent-green);
+    border-radius: 6px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-approve:hover { background: var(--accent-green); color: #fff; }
+  .btn-reject {
+    padding: 5px 12px;
+    background: var(--accent-red-light);
+    color: var(--accent-red);
+    border: 1.5px solid var(--accent-red);
+    border-radius: 6px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-reject:hover { background: var(--accent-red); color: #fff; }
+  .status-badge {
+    font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px;
+  }
+  .approved-badge { background: var(--accent-green-light); color: var(--accent-green); }
+  .rejected-badge { background: var(--accent-red-light); color: var(--accent-red); }
+  .pending-badge { background: #FEF3C7; color: #D97706; }
+
+  /* 연차 현황 */
+  .leave-table {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--sidebar); color: #fff; }
+  thead th { padding: 12px 16px; font-size: 12px; font-weight: 700; text-align: left; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:hover { background: var(--bg); }
+  tbody td { padding: 12px 16px; font-size: 13px; }
+  .leave-bar-wrap { width: 120px; height: 6px; background: var(--border); border-radius: 3px; }
+  .leave-bar { height: 6px; background: var(--primary); border-radius: 3px; transition: width 0.3s; }
+  .leave-bar.low { background: var(--accent-red); }
+
+  /* 직원 관리 */
+  .staff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .staff-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .staff-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .staff-avatar {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: var(--primary-light);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800;
+  }
+  .staff-card-name { font-size: 15px; font-weight: 800; }
+  .staff-card-team { font-size: 12px; color: var(--text-sub); }
+  .staff-fields { display: grid; gap: 8px; }
+  .staff-field-row { display: flex; align-items: center; gap: 8px; }
+  .staff-field-label { font-size: 11px; color: var(--text-sub); font-weight: 600; width: 60px; }
+  .staff-field-val { font-size: 13px; font-weight: 600; }
+  .staff-edit-input {
+    flex: 1; padding: 5px 9px;
+    border: 1.5px solid var(--border); border-radius: 6px;
+    font-size: 13px;
+  }
+  .btn-edit {
+    padding: 5px 12px;
+    background: var(--primary-light); color: var(--primary);
+    border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-save {
+    padding: 5px 12px;
+    background: var(--primary); color: #fff;
+    border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* 토스트 */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--sidebar); color: #fff;
+    padding: 12px 22px; border-radius: 30px;
+    font-size: 14px; font-weight: 600;
+    z-index: 9999; opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .hidden { display: none !important; }
+  .empty-msg { padding: 24px 16px; text-align: center; color: var(--text-sub); font-size: 13px; }
+  .stats-row { display: flex; gap: 14px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border-radius: var(--radius); padding: 16px 20px;
+    box-shadow: var(--shadow); flex: 1;
+  }
+  .stat-num { font-size: 28px; font-weight: 800; }
+  .stat-lbl { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 60px; padding: 16px 8px; }
+    .sidebar-brand, .sidebar-sub, .sidebar-section, .sidebar-item span { display: none; }
+    .sidebar-item { justify-content: center; }
+    .content { margin-left: 60px; padding: 16px; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* ── 연차 현황 새 디자인 ── */
+  .lv-layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; height: calc(100vh - 140px); }
+  .lv-staff-list {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .lv-staff-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    font-size: 12px; font-weight: 800; color: var(--text-sub);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  .lv-staff-item {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .lv-staff-item:hover { background: var(--bg); }
+  .lv-staff-item.active { background: var(--primary-light); }
+  .lv-staff-avatar {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--primary-light); color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; flex-shrink: 0;
+  }
+  .lv-staff-item.active .lv-staff-avatar { background: var(--primary); color: #fff; }
+  .lv-staff-name { font-size: 14px; font-weight: 700; }
+  .lv-staff-meta { font-size: 11px; color: var(--text-sub); }
+  .lv-staff-remain {
+    margin-left: auto; font-size: 12px; font-weight: 800;
+    padding: 3px 8px; border-radius: 20px;
+  }
+  .remain-ok { background: var(--accent-green-light); color: var(--accent-green); }
+  .remain-low { background: var(--accent-red-light); color: var(--accent-red); }
+
+  /* 우측 상세 패널 */
+  .lv-detail { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .lv-summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .lv-summary-card {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .lv-sum-label { font-size: 11px; color: var(--text-sub); font-weight: 700; margin-bottom: 6px; }
+  .lv-sum-val { font-size: 20px; font-weight: 800; }
+  .lv-sum-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+
+  /* 이력 테이블 */
+  .lv-history-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; flex: 1; }
+  .lv-history-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .lv-history-title { font-size: 14px; font-weight: 800; }
+  .lv-history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lv-history-table thead { background: #F8FAFC; }
+  .lv-history-table thead th {
+    padding: 10px 14px; text-align: left;
+    font-size: 11px; font-weight: 700; color: var(--text-sub);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .lv-history-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  .lv-history-table tbody tr:hover { background: var(--bg); }
+  .lv-history-table tbody td { padding: 11px 14px; vertical-align: middle; }
+  .lh-type-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .lh-all { background: var(--primary-light); color: var(--primary); }
+  .lh-hour { background: var(--accent-orange-light); color: var(--accent-orange); }
+  .lh-urgent { background: var(--accent-red-light); color: var(--accent-red); }
+  .lh-status { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+  .lh-pending { background: #FEF3C7; color: #D97706; }
+  .lh-approved { background: var(--accent-green-light); color: var(--accent-green); }
+  .lh-rejected { background: var(--accent-red-light); color: var(--accent-red); }
+  .lh-action-btn {
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    border: none; transition: all 0.15s;
+  }
+  .lh-approve { background: var(--accent-green-light); color: var(--accent-green); border: 1.5px solid var(--accent-green); }
+  .lh-approve:hover { background: var(--accent-green); color: #fff; }
+  .lh-reject { background: var(--accent-red-light); color: var(--accent-red); border: 1.5px solid var(--accent-red); }
+  .lh-reject:hover { background: var(--accent-red); color: #fff; }
+  .lh-remain-row {
+    background: linear-gradient(135deg, var(--primary-light), #E0EAFF);
+    font-weight: 700;
+  }
+  .lh-remain-row td { padding: 12px 14px; }
+  .lv-empty { padding: 48px; text-align: center; color: var(--text-sub); font-size: 13px; }
+  .lv-placeholder {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; color: var(--text-sub); gap: 8px;
+  }
+  .lv-placeholder-icon { font-size: 40px; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-icon">🔐</div>
+    <div class="login-title">관리자 로그인</div>
+    <div class="login-sub">별가람 근무 관리 시스템</div>
+    <input type="password" class="form-input" id="pwInput" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter') doAdminLogin()">
+    <button class="btn-primary" onclick="doAdminLogin()">로그인</button>
+  </div>
+</div>
+
+<!-- 메인 앱 -->
+<div id="mainApp" class="app hidden">
+  <!-- 사이드바 -->
+  <div class="sidebar">
+    <div class="sidebar-brand">⭐ 별가람</div>
+    <div class="sidebar-sub">근무 관리 · 관리자</div>
+    <div class="sidebar-section">메뉴</div>
+    <div class="sidebar-item active" onclick="showPage('requests')" id="nav-requests">
+      <span>📋</span><span>근무 신청</span>
+    </div>
+    <div class="sidebar-item" onclick="showPage('leave')" id="nav-leave">
+      <span>🌴</span><span>연차 현황</span>
+    </div>
+    <div class="sidebar-item" onclick="showPage('staff')" id="nav-staff">
+      <span>👥</span><span>직원 관리</span>
+    </div>
+    <div class="sidebar-item" onclick="showPage('teamlimit')" id="nav-teamlimit">
+      <span>🔢</span><span>팀 인원 제한</span>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-item" onclick="window.location.href='../staff/index.html'" style="color:rgba(255,255,255,0.5);">
+      <span>👥</span><span>직원 페이지</span>
+    </div>
+    <div class="sidebar-logout" onclick="doLogout()">
+      <span>↩</span><span>로그아웃</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 근무 신청 페이지 -->
+    <div id="page-requests">
+      <div class="page-header">
+        <div>
+          <div class="page-title">근무 신청 관리</div>
+          <div class="page-sub">대기중인 신청을 검토하고 승인/반려하세요</div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statPending" style="color:var(--accent-orange)">0</div>
+          <div class="stat-lbl">🕐 검토 대기</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statApproved" style="color:var(--accent-green)">0</div>
+          <div class="stat-lbl">✓ 오늘 승인</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statTotal" style="color:var(--primary)">0</div>
+          <div class="stat-lbl">📅 이번달 총 신청</div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="setViewTab('calendar', this)">📅 달력 뷰</button>
+        <button class="tab-btn" onclick="setViewTab('list', this)">📋 날짜별 목록</button>
+      </div>
+
+      <!-- 달력 뷰 -->
+      <div id="calView">
+        <div class="calendar-header">
+          <div class="cal-nav" onclick="changeMonth(-1)">‹</div>
+          <div class="cal-month" id="calMonthLabel"></div>
+          <div class="cal-nav" onclick="changeMonth(1)">›</div>
+        </div>
+        <div class="calendar-grid">
+          <div class="cal-weekdays">
+            <div class="cal-wd">일</div>
+            <div class="cal-wd">월</div>
+            <div class="cal-wd">화</div>
+            <div class="cal-wd">수</div>
+            <div class="cal-wd">목</div>
+            <div class="cal-wd">금</div>
+            <div class="cal-wd">토</div>
+          </div>
+          <div class="cal-days" id="calDays"></div>
+        </div>
+      </div>
+
+      <!-- 날짜별 목록 뷰 -->
+      <div id="listView" class="hidden">
+        <div class="date-list-header">
+          <input type="date" class="date-input" id="listDate" onchange="loadDateRequests()">
+          <span style="font-size:13px;color:var(--text-sub)">날짜를 선택하세요</span>
+        </div>
+        <div class="two-col">
+          <div class="col-card">
+            <div class="col-header leave-h">🌴 연차 신청</div>
+            <div id="leaveCol"><div class="empty-msg">없음</div></div>
+          </div>
+          <div class="col-card">
+            <div class="col-header extra-h">⏰ 추가근무 신청</div>
+            <div id="extraCol"><div class="empty-msg">없음</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 연차 현황 페이지 -->
+    <div id="page-leave" class="hidden">
+      <div class="page-header" style="margin-bottom:16px;">
+        <div>
+          <div class="page-title">연차 현황</div>
+          <div class="page-sub">직원을 선택하면 연차 신청 이력과 잔여를 확인할 수 있습니다</div>
+        </div>
+      </div>
+
+      <div class="lv-layout">
+        <!-- 좌측: 직원 목록 -->
+        <div class="lv-staff-list">
+          <div class="lv-staff-header">직원 목록</div>
+          <div id="lvStaffList">
+            <div style="padding:24px;text-align:center;color:var(--text-sub);font-size:13px;">불러오는 중...</div>
+          </div>
+        </div>
+
+        <!-- 우측: 상세 -->
+        <div class="lv-detail" id="lvDetail">
+          <div class="lv-placeholder">
+            <div class="lv-placeholder-icon">🌴</div>
+            <div style="font-weight:700;font-size:14px">직원을 선택하세요</div>
+            <div style="font-size:12px">연차 신청 이력과 잔여 현황을 확인합니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 직원 관리 페이지 -->
+    <div id="page-staff" class="hidden">
+      <div class="page-header">
+        <div>
+          <div class="page-title">직원 관리</div>
+          <div class="page-sub">입사일, 근무유형, 초기 연차를 설정하세요</div>
+        </div>
+        <button class="btn-primary" style="width:auto;padding:10px 18px;" onclick="showAddStaff()">+ 직원 추가</button>
+      </div>
+
+      <!-- 직원 추가 폼 -->
+      <div id="addStaffForm" class="col-card hidden" style="margin-bottom:20px;padding:20px;">
+        <div style="font-size:15px;font-weight:800;margin-bottom:16px;">새 직원 추가</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">팀</label>
+            <input class="staff-edit-input" id="newTeam" placeholder="팀 이름" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">이름</label>
+            <input class="staff-edit-input" id="newName" placeholder="이름" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">근무유형</label>
+            <select class="staff-edit-input" id="newType" style="width:100%">
+              <option value="상근">상근 (8h)</option>
+              <option value="주4일">주4일 (7h24m)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">입사일</label>
+            <input type="date" class="staff-edit-input" id="newJoin" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-sub);font-weight:700;display:block;margin-bottom:5px;">초기 연차</label>
+            <input type="number" class="staff-edit-input" id="newLeave" placeholder="15" min="0" max="30" style="width:100%">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-save" onclick="saveNewStaff()">저장</button>
+          <button class="btn-edit" onclick="document.getElementById('addStaffForm').classList.add('hidden')">취소</button>
+        </div>
+      </div>
+
+      <div class="staff-grid" id="staffGrid">
+        <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
+      </div>
+    </div>
+
+    <!-- 팀 인원 제한 페이지 -->
+    <div id="page-teamlimit" class="hidden">
+      <div class="page-header" style="margin-bottom:20px">
+        <div>
+          <div class="page-title">팀 인원 제한 설정</div>
+          <div class="page-sub">날짜별 팀당 최대 연차 신청 가능 인원을 설정하세요. 초과 시 직원의 신청이 차단됩니다.</div>
+        </div>
+      </div>
+
+      <!-- 팀 목록 + 제한 설정 -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:28px" id="teamLimitCards">
+        <div style="text-align:center;padding:40px;color:var(--text-sub)">불러오는 중...</div>
+      </div>
+
+      <!-- 날짜별 현황 미리보기 -->
+      <div class="page-title" style="font-size:16px;margin-bottom:12px">📅 날짜별 팀 현황 미리보기</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <input type="date" class="form-input" id="tlPreviewDate" style="width:180px" onchange="renderTeamLimitPreview()">
+        <span style="font-size:13px;color:var(--text-sub)">날짜 선택 시 팀별 신청 현황 확인</span>
+      </div>
+      <div id="tlPreviewBody"></div>
+    </div>
+
+  </div><!-- /content -->
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, collection, getDocs, updateDoc, addDoc, doc, setDoc,
+  query, where, orderBy, serverTimestamp, writeBatch }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBCFo6KiIrtAF21EWdT-lhmEEloHrX-0w8",
+  authDomain: "precheck-sarang.firebaseapp.com",
+  projectId: "precheck-sarang",
+  storageBucket: "precheck-sarang.firebasestorage.app",
+  messagingSenderId: "259948255177",
+  appId: "1:259948255177:web:ed3c4f1b0b860715387a18",
+  measurementId: "G-PPL5B6MMG2"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ─── 상태 ───
+let allRequests = [];
+let allStaff = [];
+let teamLimits = {}; // { '진료팀': 2, '데스크팀': 1, ... }
+let calYear, calMonth;
+let editingStaff = {};
+
+const now = new Date();
+calYear = now.getFullYear();
+calMonth = now.getMonth();
+
+// ─── 유틸 ───
+window.showToast = function(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+};
+
+function fmt(date) {
+  if (!date) return '';
+  if (typeof date.toDate === 'function') date = date.toDate();
+  return date instanceof Date ? date.toISOString().slice(0,10) : date;
+}
+
+// ─── 로그인 ───
+window.doAdminLogin = function() {
+  const pw = document.getElementById('pwInput').value;
+  if (pw === '1234') {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    initAdmin();
+  } else {
+    showToast('비밀번호가 틀렸습니다');
+  }
+};
+
+window.doLogout = function() {
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('pwInput').value = '';
+};
+
+async function initAdmin() {
+  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits()]);
+  renderCalendar();
+  renderLeaveTable();
+  renderStaffGrid();
+  renderTeamLimitCards();
+  updateStats();
+  document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('tlPreviewDate').value = new Date().toISOString().slice(0,10);
+  renderTeamLimitPreview();
+}
+
+// ─── 데이터 로드 ───
+async function loadAllRequests() {
+  try {
+    const snap = await getDocs(query(collection(db, 'schedule_requests'), orderBy('createdAt', 'desc')));
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) {
+    // Demo
+    allRequests = [
+      { id:'r1', type:'leave', staffName:'김민지', staffTeam:'진료팀', date:'2025-06-25', leaveSubType:'all', leaveAmount:1, memo:'개인 사정', status:'pending', createdAt:null },
+      { id:'r2', type:'extra', staffName:'이수연', staffTeam:'진료팀', date:'2025-06-25', startTime:'18:00', endTime:'20:00', memo:'월말 정산', status:'pending', createdAt:null },
+      { id:'r3', type:'leave', staffName:'정유진', staffTeam:'데스크팀', date:'2025-06-26', leaveSubType:'hour', startTime:'14:00', endTime:'18:00', leaveAmount:0.5, memo:'병원 예약', status:'approved', createdAt:null },
+      { id:'r4', type:'swap', staffName:'오채원', staffTeam:'상담팀', date:'2025-06-27', swapTarget:'신예린', memo:'개인 일정', status:'pending', createdAt:null },
+    ];
+  }
+}
+
+async function loadAllStaff() {
+  try {
+    const snap = await getDocs(collection(db, 'staff_list'));
+    allStaff = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) {
+    allStaff = [
+      { id:'s1', team:'진료팀', name:'김민지', type:'상근', joinDate:'2023-03-01', initLeave:15 },
+      { id:'s2', team:'진료팀', name:'이수연', type:'상근', joinDate:'2022-01-15', initLeave:15 },
+      { id:'s3', team:'데스크팀', name:'정유진', type:'주4일', joinDate:'2024-06-01', initLeave:11 },
+      { id:'s4', team:'상담팀', name:'오채원', type:'상근', joinDate:'2023-09-01', initLeave:15 },
+      { id:'s5', team:'상담팀', name:'신예린', type:'상근', joinDate:'2024-02-15', initLeave:11 },
+    ];
+  }
+}
+
+// ─── 페이지 전환 ───
+window.showPage = function(page) {
+  ['requests','leave','staff','teamlimit'].forEach(p => {
+    document.getElementById(`page-${p}`)?.classList.add('hidden');
+    document.getElementById(`nav-${p}`)?.classList.remove('active');
+  });
+  document.getElementById(`page-${page}`)?.classList.remove('hidden');
+  document.getElementById(`nav-${page}`)?.classList.add('active');
+  if (page === 'teamlimit') renderTeamLimitCards();
+};
+
+// ─── 통계 ───
+function updateStats() {
+  const pending = allRequests.filter(r => r.status === 'pending').length;
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+  const todayStr = now.toISOString().slice(0,10);
+  const approvedToday = allRequests.filter(r => r.status === 'approved' && r.date === todayStr).length;
+  const totalMonth = allRequests.filter(r => {
+    const d = r.date;
+    return d && d.startsWith(`${thisYear}-${String(thisMonth+1).padStart(2,'0')}`);
+  }).length;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statApproved').textContent = approvedToday;
+  document.getElementById('statTotal').textContent = totalMonth;
+}
+
+// ─── 뷰 탭 ───
+window.setViewTab = function(view, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('calView').classList.toggle('hidden', view !== 'calendar');
+  document.getElementById('listView').classList.toggle('hidden', view !== 'list');
+};
+
+// ─── 달력 ───
+window.changeMonth = function(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+};
+
+function renderCalendar() {
+  document.getElementById('calMonthLabel').textContent = `${calYear}년 ${calMonth+1}월`;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  const container = document.getElementById('calDays');
+  container.innerHTML = '';
+
+  for (let i = 0; i < firstDay; i++) {
+    container.innerHTML += '<div class="cal-day empty"></div>';
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayOfWeek = new Date(calYear, calMonth, d).getDay();
+    const dayReqs = allRequests.filter(r => r.date === dateStr);
+
+    const isSun = dayOfWeek === 0, isSat = dayOfWeek === 6;
+    const isToday = dateStr === todayStr;
+    const cls = ['cal-day', isSun?'sun':'', isSat?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
+
+    const chips = dayReqs.slice(0,4).map(r => {
+      const cls2 = r.type === 'leave' ? 'chip-leave' : r.type === 'extra' ? 'chip-extra' : 'chip-swap';
+      const pnd = r.status === 'pending' ? 'chip-pending' : '';
+      const lbl = r.type === 'leave' ? `🌴${r.staffName}` : r.type === 'extra' ? `⏰${r.staffName}` : `🔄${r.staffName}`;
+      return `<div class="cal-chip ${cls2} ${pnd}">${lbl}</div>`;
+    }).join('');
+
+    container.innerHTML += `
+      <div class="${cls}" onclick="openDayDetail('${dateStr}')">
+        <div class="cal-day-num">${d}</div>
+        <div class="cal-chips">${chips}</div>
+      </div>`;
+  }
+}
+
+window.openDayDetail = function(dateStr) {
+  // 날짜별 목록으로 전환
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', i === 1);
+  });
+  document.getElementById('calView').classList.add('hidden');
+  document.getElementById('listView').classList.remove('hidden');
+  document.getElementById('listDate').value = dateStr;
+  loadDateRequests();
+};
+
+// ─── 날짜별 목록 ───
+window.loadDateRequests = function() {
+  const date = document.getElementById('listDate').value;
+  if (!date) return;
+
+  const dayReqs = allRequests.filter(r => r.date === date);
+  const leaves = dayReqs.filter(r => r.type === 'leave');
+  const extras = dayReqs.filter(r => r.type === 'extra');
+  const swaps = dayReqs.filter(r => r.type === 'swap');
+
+  renderRequestCol('leaveCol', [...leaves, ...swaps]);
+  renderRequestCol('extraCol', extras);
+};
+
+function renderRequestCol(colId, reqs) {
+  const col = document.getElementById(colId);
+  if (!reqs.length) { col.innerHTML = '<div class="empty-msg">신청 없음</div>'; return; }
+  col.innerHTML = reqs.map(r => {
+    const detail = r.type === 'leave'
+      ? (r.leaveSubType === 'all' ? '종일' : `${r.startTime}~${r.endTime}`)
+      : r.type === 'extra'
+      ? `${r.startTime}~${r.endTime}`
+      : `↔ ${r.swapTarget}`;
+
+    const statusHtml = r.status === 'pending'
+      ? `<div class="req-actions">
+          <button class="btn-approve" onclick="updateStatus('${r.id}','approved')">O 승인</button>
+          <button class="btn-reject" onclick="updateStatus('${r.id}','rejected')">X 반려</button>
+        </div>`
+      : `<span class="status-badge ${r.status === 'approved' ? 'approved-badge' : 'rejected-badge'}">
+          ${r.status === 'approved' ? '✓ 승인' : '✕ 반려'}
+        </span>`;
+
+    const typeIcon = r.type === 'leave' ? '🌴' : r.type === 'extra' ? '⏰' : '🔄';
+    return `
+      <div class="request-row">
+        <div class="req-info">
+          <div class="req-name">${typeIcon} ${r.staffName} <span style="font-size:11px;color:var(--text-sub);font-weight:400">${r.staffTeam}</span></div>
+          <div class="req-detail">${detail}${r.memo ? ' · ' + r.memo : ''}</div>
+        </div>
+        ${statusHtml}
+      </div>`;
+  }).join('');
+}
+
+// ─── 승인/반려 ───
+window.updateStatus = async function(reqId, status) {
+  const req = allRequests.find(r => r.id === reqId);
+  if (!req) return;
+
+  try {
+    await updateDoc(doc(db, 'schedule_requests', reqId), { status, updatedAt: serverTimestamp() });
+  } catch(e) {}
+  req.status = status;
+  showToast(status === 'approved' ? '✅ 승인되었습니다' : '❌ 반려되었습니다');
+  loadDateRequests();
+  renderCalendar();
+  updateStats();
+  renderLeaveTable();
+  if (req.type === 'leave' && selectedLeaveStaffId) selectLeaveStaff(selectedLeaveStaffId);
+};
+
+// ─── 연차 현황 ───
+// ─── 연차 계산 (분 단위) ───
+function getMinPerDay(staff) {
+  return (staff.type === '주4일') ? 444 : 480; // 주4일=7h24m, 상근=8h
+}
+
+function calcLeaveMinutes(staff) {
+  const join = staff.joinDate ? new Date(staff.joinDate) : new Date();
+  const months = (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth());
+  const totalDays = staff.initLeave != null ? staff.initLeave : (months < 12 ? 11 : 15);
+  const minPerDay = getMinPerDay(staff);
+  const totalMin = totalDays * minPerDay;
+
+  const leaveReqs = allRequests.filter(r =>
+    r.staffName === staff.name && r.type === 'leave' && r.status === 'approved'
+  );
+  let usedMin = 0;
+  leaveReqs.forEach(r => {
+    if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+      const [sh,sm] = r.startTime.split(':').map(Number);
+      const [eh,em] = r.endTime.split(':').map(Number);
+      usedMin += (eh*60+em) - (sh*60+sm);
+    } else {
+      usedMin += (r.leaveAmount || 1) * minPerDay;
+    }
+  });
+  return { totalMin, usedMin, remainMin: totalMin - usedMin, totalDays, minPerDay };
+}
+
+// 분 → "Xh Ym" 문자열
+function fmtMin(mins) {
+  if (mins <= 0) return '0h';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h + 'h' + (m ? ' ' + m + 'm' : '');
+}
+// 분 → "(N개 Xh Ym)" 문자열
+function fmtDayCount(mins, minPerDay) {
+  if (mins <= 0) return '(0개)';
+  const days = Math.floor(mins / minPerDay);
+  const rem = mins % minPerDay;
+  const rh = Math.floor(rem / 60), rm = rem % 60;
+  let parts = days + '개';
+  if (rh || rm) parts += ' ' + (rh ? rh + 'h' : '') + (rm ? rm + 'm' : '');
+  return '(' + parts + ')';
+}
+
+// ─── 연차 현황: 직원 목록 렌더 ───
+function renderLeaveTable() {  // 이름 유지 (호출부 호환)
+  const list = document.getElementById('lvStaffList');
+  if (!allStaff.length) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-sub);font-size:13px">직원 데이터 없음</div>';
+    return;
+  }
+  list.innerHTML = allStaff.map(s => {
+    const { remainMin, minPerDay } = calcLeaveMinutes(s);
+    const isLow = remainMin < minPerDay * 3; // 3일 미만
+    return `
+      <div class="lv-staff-item" id="lvsi-${s.id}" onclick="selectLeaveStaff('${s.id}')">
+        <div class="lv-staff-avatar">${s.name[0]}</div>
+        <div>
+          <div class="lv-staff-name">${s.name}</div>
+          <div class="lv-staff-meta">${s.team} · ${s.type||'상근'}</div>
+        </div>
+        <span class="lv-staff-remain ${isLow ? 'remain-low' : 'remain-ok'}">${fmtMin(remainMin)}</span>
+      </div>`;
+  }).join('');
+}
+
+// ─── 연차 현황: 직원 선택 상세 ───
+let selectedLeaveStaffId = null;
+
+window.selectLeaveStaff = function(staffId) {
+  selectedLeaveStaffId = staffId;
+  // 활성 표시
+  document.querySelectorAll('.lv-staff-item').forEach(el => el.classList.remove('active'));
+  document.getElementById(`lvsi-${staffId}`)?.classList.add('active');
+
+  const staff = allStaff.find(s => s.id === staffId);
+  if (!staff) return;
+
+  const { totalMin, usedMin, remainMin, totalDays, minPerDay } = calcLeaveMinutes(staff);
+
+  // 이 직원의 연차 신청 이력 (날짜 오름차순)
+  const leaveReqs = allRequests
+    .filter(r => r.staffName === staff.name && r.type === 'leave')
+    .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+
+  // 누적 잔여 계산용
+  let runMin = totalMin;
+
+  // 입사일 기준 총 연차 개수/시간 표시
+  const join = staff.joinDate ? new Date(staff.joinDate) : new Date();
+  const months = (now.getFullYear() - join.getFullYear())*12 + (now.getMonth()-join.getMonth());
+  const yrs = Math.floor(months/12);
+
+  const detail = document.getElementById('lvDetail');
+  detail.innerHTML = `
+    <!-- 상단 요약 카드 -->
+    <div class="lv-summary-row">
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">👤 직원</div>
+        <div class="lv-sum-val" style="font-size:17px">${staff.name}</div>
+        <div class="lv-sum-sub">${staff.team} · ${staff.type||'상근'} · 입사 ${yrs}년</div>
+      </div>
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">📋 총 보유 연차</div>
+        <div class="lv-sum-val" style="color:var(--primary)">${fmtMin(totalMin)}</div>
+        <div class="lv-sum-sub">${fmtDayCount(totalMin, minPerDay)} · 1일=${fmtMin(minPerDay)}</div>
+      </div>
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">✅ 사용</div>
+        <div class="lv-sum-val" style="color:var(--accent-orange)">${fmtMin(usedMin)}</div>
+        <div class="lv-sum-sub">${fmtDayCount(usedMin, minPerDay)}</div>
+      </div>
+      <div class="lv-summary-card">
+        <div class="lv-sum-label">🌴 잔여</div>
+        <div class="lv-sum-val" style="color:${remainMin < minPerDay*3 ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMin(remainMin)}</div>
+        <div class="lv-sum-sub">${fmtDayCount(remainMin, minPerDay)}</div>
+      </div>
+    </div>
+
+    <!-- 이력 테이블 -->
+    <div class="lv-history-card">
+      <div class="lv-history-header">
+        <div class="lv-history-title">📅 연차 신청 이력</div>
+        <div style="font-size:12px;color:var(--text-sub)">총 ${leaveReqs.length}건</div>
+      </div>
+      ${leaveReqs.length === 0
+        ? `<div class="lv-empty">연차 신청 이력이 없습니다</div>`
+        : `<div style="overflow-x:auto">
+        <table class="lv-history-table">
+          <thead>
+            <tr>
+              <th style="width:36px">#</th>
+              <th>휴가희망일</th>
+              <th>유형</th>
+              <th>차감시간</th>
+              <th>잔여시간</th>
+              <th>메모</th>
+              <th>연차신청서 작성</th>
+              <th>승인</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${leaveReqs.map((r, i) => {
+              let deductMin = 0;
+              if (r.status === 'approved') {
+                if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+                  const [sh,sm] = r.startTime.split(':').map(Number);
+                  const [eh,em] = r.endTime.split(':').map(Number);
+                  deductMin = (eh*60+em) - (sh*60+sm);
+                } else {
+                  deductMin = (r.leaveAmount || 1) * minPerDay;
+                }
+                runMin -= deductMin;
+              }
+              const typeLabel = r.leaveSubType === 'hour' ? '시간연차' : r.leaveSubType === 'urgent' ? '당일응급' : '연차';
+              const typeCls = r.leaveSubType === 'hour' ? 'lh-hour' : r.leaveSubType === 'urgent' ? 'lh-urgent' : 'lh-all';
+              const timeStr = r.leaveSubType === 'hour' && r.startTime
+                ? `${r.startTime}~${r.endTime||''}`
+                : (r.leaveSubType === 'all' || !r.leaveSubType) ? `${fmtMin(minPerDay)}` : '-';
+              const stClass = r.status === 'approved' ? 'lh-approved' : r.status === 'rejected' ? 'lh-rejected' : 'lh-pending';
+              const stLabel = r.status === 'approved' ? '✓ 승인' : r.status === 'rejected' ? '✕ 반려' : '검토중';
+              const actionHtml = r.status === 'pending'
+                ? `<button class="lh-action-btn lh-approve" onclick="approveLeave('${r.id}','approved','${staffId}')">O</button>
+                   <button class="lh-action-btn lh-reject" onclick="approveLeave('${r.id}','rejected','${staffId}')">X</button>`
+                : `<span class="lh-status ${stClass}">${stLabel}</span>`;
+              const deductStr = r.status === 'approved' ? fmtMin(deductMin) : '-';
+              const remainStr = r.status === 'approved' ? fmtMin(runMin + deductMin) + ' → ' + fmtMin(runMin) : '-';
+              const docChecked = r.docSubmitted ? '✅' : '☐';
+
+              return `
+                <tr>
+                  <td style="color:var(--text-sub);font-size:11px">${i+1}</td>
+                  <td style="font-weight:700;white-space:nowrap">${r.date || '-'}</td>
+                  <td><span class="lh-type-badge ${typeCls}">${typeLabel}</span></td>
+                  <td style="font-weight:700;color:var(--accent-orange)">${deductStr}</td>
+                  <td style="font-size:12px;color:var(--text-sub)">${remainStr}</td>
+                  <td style="font-size:12px;color:var(--text-sub);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.memo||'-'}</td>
+                  <td style="text-align:center;font-size:16px;cursor:pointer" onclick="toggleDoc('${r.id}','${staffId}')" title="클릭하여 작성여부 토글">${docChecked}</td>
+                  <td>${actionHtml}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>`
+      }
+    </div>`;
+};
+
+// ─── 연차 승인/반려 (연차 현황 탭에서) ───
+window.approveLeave = async function(reqId, status, staffId) {
+  try {
+    await updateDoc(doc(db, 'schedule_requests', reqId), { status, updatedAt: serverTimestamp() });
+  } catch(e) {}
+  const req = allRequests.find(r => r.id === reqId);
+  if (req) req.status = status;
+  showToast(status === 'approved' ? '✅ 승인되었습니다' : '❌ 반려되었습니다');
+  renderLeaveTable();
+  selectLeaveStaff(staffId);
+  updateStats();
+};
+
+// ─── 연차신청서 작성여부 토글 ───
+window.toggleDoc = async function(reqId, staffId) {
+  const req = allRequests.find(r => r.id === reqId);
+  if (!req) return;
+  req.docSubmitted = !req.docSubmitted;
+  try {
+    await updateDoc(doc(db, 'schedule_requests', reqId), { docSubmitted: req.docSubmitted });
+  } catch(e) {}
+  selectLeaveStaff(staffId);
+};
+
+// ─── 팀 인원 제한 ───
+async function loadTeamLimits() {
+  try {
+    const snap = await getDocs(collection(db, 'team_limits'));
+    teamLimits = {};
+    snap.forEach(d => { teamLimits[d.id] = d.data(); });
+  } catch {
+    // 기본값
+    teamLimits = {
+      '진료팀':   { maxLeave: 2, maxExtra: 99, maxSwap: 99 },
+      '데스크팀': { maxLeave: 1, maxExtra: 99, maxSwap: 99 },
+      '상담팀':   { maxLeave: 1, maxExtra: 99, maxSwap: 99 },
+      '기타':     { maxLeave: 1, maxExtra: 99, maxSwap: 99 },
+    };
+  }
+}
+
+function getTeamNames() {
+  const fromStaff = [...new Set(allStaff.map(s => s.team).filter(Boolean))];
+  const fromLimits = Object.keys(teamLimits);
+  return [...new Set([...fromStaff, ...fromLimits])];
+}
+
+function renderTeamLimitCards() {
+  const container = document.getElementById('teamLimitCards');
+  const teams = getTeamNames();
+  if (!teams.length) { container.innerHTML = '<div style="color:var(--text-sub);padding:20px">직원 데이터를 먼저 등록하세요</div>'; return; }
+
+  // 팀 색상 맵
+  const colors = ['var(--primary)','var(--accent-green)','var(--accent-purple)','var(--accent-orange)','#E53E3E','#0891B2'];
+
+  container.innerHTML = teams.map((team, idx) => {
+    const lim = teamLimits[team] || { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
+    const memberCount = allStaff.filter(s => s.team === team).length;
+    const color = colors[idx % colors.length];
+    return `
+      <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border-top:3px solid ${color}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div style="width:36px;height:36px;border-radius:10px;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800">${team[0]}</div>
+          <div>
+            <div style="font-size:15px;font-weight:800">${team}</div>
+            <div style="font-size:12px;color:var(--text-sub)">${memberCount}명</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--primary-light);border-radius:8px">
+            <span style="font-size:13px;font-weight:700;color:var(--primary)">🌴 연차 최대</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onclick="adjustLimit('${team}','maxLeave',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
+              <span id="lim-${team}-maxLeave" style="font-size:18px;font-weight:800;color:var(--primary);min-width:28px;text-align:center">${lim.maxLeave >= 99 ? '∞' : lim.maxLeave}</span>
+              <button onclick="adjustLimit('${team}','maxLeave',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
+              <span style="font-size:11px;color:var(--text-sub)">명</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--accent-green-light);border-radius:8px">
+            <span style="font-size:13px;font-weight:700;color:var(--accent-green)">⏰ 추가근무 최대</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onclick="adjustLimit('${team}','maxExtra',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
+              <span id="lim-${team}-maxExtra" style="font-size:18px;font-weight:800;color:var(--accent-green);min-width:28px;text-align:center">${lim.maxExtra >= 99 ? '∞' : lim.maxExtra}</span>
+              <button onclick="adjustLimit('${team}','maxExtra',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
+              <span style="font-size:11px;color:var(--text-sub)">명</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--accent-purple-light);border-radius:8px">
+            <span style="font-size:13px;font-weight:700;color:var(--accent-purple)">🔄 근무교체 최대</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onclick="adjustLimit('${team}','maxSwap',-1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">−</button>
+              <span id="lim-${team}-maxSwap" style="font-size:18px;font-weight:800;color:var(--accent-purple);min-width:28px;text-align:center">${lim.maxSwap >= 99 ? '∞' : lim.maxSwap}</span>
+              <button onclick="adjustLimit('${team}','maxSwap',1)" style="width:26px;height:26px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">+</button>
+              <span style="font-size:11px;color:var(--text-sub)">명</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.adjustLimit = async function(team, field, delta) {
+  if (!teamLimits[team]) teamLimits[team] = { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
+  const cur = teamLimits[team][field];
+  // 99 = 무제한, 1 이상
+  let next = cur >= 99 ? (delta > 0 ? 99 : 5) : Math.max(0, cur + delta);
+  if (next > 98) next = 99; // 99 = ∞
+  teamLimits[team][field] = next;
+  const el = document.getElementById(`lim-${team}-${field}`);
+  if (el) el.textContent = next >= 99 ? '∞' : next;
+  try {
+    await setDoc(doc(db, 'team_limits', team), teamLimits[team]);
+  } catch {}
+  showToast(`✅ ${team} ${field === 'maxLeave' ? '연차' : field === 'maxExtra' ? '추가근무' : '근무교체'} 제한: ${next >= 99 ? '무제한' : next + '명'}`);
+};
+
+// ─── 날짜별 팀 현황 미리보기 ───
+window.renderTeamLimitPreview = function() {
+  const date = document.getElementById('tlPreviewDate').value;
+  const body = document.getElementById('tlPreviewBody');
+  if (!date) { body.innerHTML = ''; return; }
+
+  const teams = getTeamNames();
+  const dayReqs = allRequests.filter(r => r.date === date);
+
+  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">` +
+    teams.map(team => {
+      const lim = teamLimits[team] || { maxLeave: 99, maxExtra: 99, maxSwap: 99 };
+      const leaveCount = dayReqs.filter(r => r.staffTeam === team && r.type === 'leave' && r.status !== 'rejected').length;
+      const extraCount = dayReqs.filter(r => r.staffTeam === team && r.type === 'extra' && r.status !== 'rejected').length;
+      const swapCount  = dayReqs.filter(r => r.staffTeam === team && r.type === 'swap'  && r.status !== 'rejected').length;
+
+      const row = (icon, label, cur, max, color) => {
+        const full = max < 99 && cur >= max;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:7px;background:${full ? '#FEE2E2' : 'var(--bg)'}">
+          <span style="font-size:12px;font-weight:700;color:${full ? 'var(--accent-red)' : color}">${icon} ${label}</span>
+          <span style="font-size:13px;font-weight:800;color:${full ? 'var(--accent-red)' : color}">${cur}/${max >= 99 ? '∞' : max}${full ? ' 🚫' : ''}</span>
+        </div>`;
+      };
+
+      return `<div style="background:var(--surface);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)">
+        <div style="font-size:14px;font-weight:800;margin-bottom:10px">${team}</div>
+        ${row('🌴','연차', leaveCount, lim.maxLeave, 'var(--primary)')}
+        ${row('⏰','추가근무', extraCount, lim.maxExtra, 'var(--accent-green)')}
+        ${row('🔄','근무교체', swapCount, lim.maxSwap, 'var(--accent-purple)')}
+      </div>`;
+    }).join('') + '</div>';
+};
+
+// ─── 직원 관리 ───
+function renderStaffGrid() {
+  const grid = document.getElementById('staffGrid');
+  if (!allStaff.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub)">직원 데이터 없음</div>';
+    return;
+  }
+  grid.innerHTML = allStaff.map(s => {
+    const { remainMin, minPerDay } = calcLeaveMinutes(s);
+    const isLow = remainMin < minPerDay * 3;
+    return `
+      <div class="staff-card" id="scard-${s.id}">
+        <div class="staff-card-top">
+          <div class="staff-avatar">${s.name[0]}</div>
+          <div>
+            <div class="staff-card-name">${s.name}</div>
+            <div class="staff-card-team">${s.team}</div>
+          </div>
+        </div>
+        <div class="staff-fields" id="sview-${s.id}">
+          <div class="staff-field-row">
+            <span class="staff-field-label">근무유형</span>
+            <span class="staff-field-val">${s.type || '상근'}</span>
+          </div>
+          <div class="staff-field-row">
+            <span class="staff-field-label">입사일</span>
+            <span class="staff-field-val">${s.joinDate || '-'}</span>
+          </div>
+          <div class="staff-field-row">
+            <span class="staff-field-label">초기연차</span>
+            <span class="staff-field-val">${s.initLeave || '-'}일</span>
+          </div>
+          <div class="staff-field-row">
+            <span class="staff-field-label">잔여연차</span>
+            <span class="staff-field-val" style="color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'};font-weight:800">${fmtMin(remainMin)}</span>
+          </div>
+          <div style="margin-top:8px">
+            <button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button>
+          </div>
+        </div>
+        <div class="staff-fields hidden" id="sedit-${s.id}">
+          <div class="staff-field-row">
+            <span class="staff-field-label">근무유형</span>
+            <select class="staff-edit-input" id="etype-${s.id}">
+              <option value="상근" ${s.type==='상근'?'selected':''}>상근</option>
+              <option value="주4일" ${s.type==='주4일'?'selected':''}>주4일</option>
+            </select>
+          </div>
+          <div class="staff-field-row">
+            <span class="staff-field-label">입사일</span>
+            <input type="date" class="staff-edit-input" id="ejoin-${s.id}" value="${s.joinDate||''}">
+          </div>
+          <div class="staff-field-row">
+            <span class="staff-field-label">초기연차</span>
+            <input type="number" class="staff-edit-input" id="eleave-${s.id}" value="${s.initLeave||15}" min="0" max="30">
+          </div>
+          <div style="margin-top:8px;display:flex;gap:6px;">
+            <button class="btn-save" onclick="saveStaff('${s.id}')">저장</button>
+            <button class="btn-edit" onclick="cancelEdit('${s.id}')">취소</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.editStaff = function(id) {
+  document.getElementById(`sview-${id}`).classList.add('hidden');
+  document.getElementById(`sedit-${id}`).classList.remove('hidden');
+};
+window.cancelEdit = function(id) {
+  document.getElementById(`sview-${id}`).classList.remove('hidden');
+  document.getElementById(`sedit-${id}`).classList.add('hidden');
+};
+
+window.saveStaff = async function(id) {
+  const type = document.getElementById(`etype-${id}`).value;
+  const joinDate = document.getElementById(`ejoin-${id}`).value;
+  const initLeave = parseInt(document.getElementById(`eleave-${id}`).value) || 15;
+
+  try {
+    await updateDoc(doc(db, 'staff_list', id), { type, joinDate, initLeave });
+  } catch(e) {}
+
+  const staff = allStaff.find(s => s.id === id);
+  if (staff) Object.assign(staff, { type, joinDate, initLeave });
+  renderStaffGrid();
+  renderLeaveTable();
+  showToast('✅ 저장되었습니다');
+};
+
+window.showAddStaff = function() {
+  document.getElementById('addStaffForm').classList.remove('hidden');
+};
+
+window.saveNewStaff = async function() {
+  const team = document.getElementById('newTeam').value.trim();
+  const name = document.getElementById('newName').value.trim();
+  const type = document.getElementById('newType').value;
+  const joinDate = document.getElementById('newJoin').value;
+  const initLeave = parseInt(document.getElementById('newLeave').value) || 15;
+  if (!team || !name) { showToast('팀과 이름을 입력하세요'); return; }
+
+  const newStaff = { team, name, type, joinDate, initLeave };
+  try {
+    const ref = await addDoc(collection(db, 'staff_list'), newStaff);
+    newStaff.id = ref.id;
+  } catch(e) {
+    newStaff.id = 's' + Date.now();
+  }
+  allStaff.push(newStaff);
+  document.getElementById('addStaffForm').classList.add('hidden');
+  ['newTeam','newName','newJoin','newLeave'].forEach(id => document.getElementById(id).value = '');
+  renderStaffGrid();
+  renderLeaveTable();
+  showToast('✅ 직원이 추가되었습니다');
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>별가람 근무 신청</title>
+<style>
+:root {
+  --bg: #F0F4FA;
+  --surface: #FFFFFF;
+  --primary: #3B6FD4;
+  --primary-light: #EBF0FB;
+  --primary-dark: #2A55B0;
+  --green: #22A66B;
+  --green-light: #E6F7F1;
+  --red: #E53E3E;
+  --red-light: #FEE2E2;
+  --orange: #E87722;
+  --orange-light: #FEF1E6;
+  --purple: #7C4DFF;
+  --purple-light: #EDE7FF;
+  --dark: #1A1D2E;
+  --sub: #6B7280;
+  --border: #E2E8F0;
+  --radius: 14px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--dark); min-height: 100vh; }
+
+/* ── 로그인 ── */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--dark); }
+.login-card { background: var(--surface); border-radius: 20px; padding: 40px 32px; width: 100%; max-width: 380px; text-align: center; }
+.login-icon { font-size: 40px; margin-bottom: 16px; }
+.login-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.login-sub { font-size: 13px; color: var(--sub); margin-bottom: 28px; }
+.form-group { margin-bottom: 14px; text-align: left; }
+.form-label { font-size: 11px; font-weight: 700; color: var(--sub); margin-bottom: 5px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-select, .form-input {
+  width: 100%; padding: 11px 14px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 15px; color: var(--dark); background: #FAFBFD;
+  appearance: none; transition: border-color 0.2s; font-family: inherit;
+}
+.form-select:focus, .form-input:focus { outline: none; border-color: var(--primary); background: #fff; }
+.btn-primary { width: 100%; padding: 13px; background: var(--primary); color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+.btn-primary:hover { background: var(--primary-dark); }
+
+/* ── 헤더 ── */
+.header {
+  background: var(--primary); color: #fff;
+  padding: 14px 16px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(59,111,212,0.3);
+}
+.header-logo { font-size: 18px; font-weight: 800; }
+.header-sub { font-size: 11px; opacity: 0.7; margin-top: 1px; }
+.header-spacer { flex: 1; }
+.header-user { background: rgba(255,255,255,0.18); border-radius: 20px; padding: 5px 13px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+/* ── 연차 정보 바 ── */
+.leave-bar {
+  background: linear-gradient(135deg, var(--primary) 0%, #5B8FFF 100%);
+  padding: 14px 16px; color: #fff;
+  display: flex; align-items: center; gap: 0;
+}
+.leave-stat { flex: 1; text-align: center; }
+.leave-stat + .leave-stat { border-left: 1px solid rgba(255,255,255,0.25); }
+.leave-val { font-size: 15px; font-weight: 800; line-height: 1.2; }
+.leave-count { font-size: 10px; opacity: 0.75; margin-top: 1px; }
+.leave-lbl { font-size: 10px; opacity: 0.65; margin-top: 3px; }
+.leave-name { font-size: 14px; font-weight: 800; }
+.leave-team { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+
+/* ── 하단 탭 ── */
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 200; box-shadow: 0 -2px 12px rgba(0,0,0,0.07); }
+.bnav-item { flex: 1; padding: 10px 4px 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; color: var(--sub); font-size: 10px; font-weight: 700; border: none; background: none; transition: color 0.15s; }
+.bnav-item .bnav-icon { font-size: 19px; }
+.bnav-item.active { color: var(--primary); }
+
+/* ── 페이지 ── */
+.main { padding: 0 0 76px; }
+.main-page { display: none; }
+.main-page.active { display: block; }
+.page-pad { padding: 16px; }
+
+/* ── 달력 ── */
+.cal-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+.cal-nav { width: 32px; height: 32px; border: 1.5px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; background: var(--surface); transition: all 0.15s; }
+.cal-nav:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.cal-month-label { font-size: 18px; font-weight: 800; flex: 1; }
+.cal-today-btn { padding: 6px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; background: var(--surface); color: var(--sub); transition: all 0.15s; }
+.cal-today-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.cal-grid { background: var(--surface); margin: 0 0 0; box-shadow: var(--shadow); }
+.cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); background: var(--dark); }
+.cal-wd { text-align: center; padding: 9px 2px; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55); letter-spacing: 0.3px; }
+.cal-wd:first-child { color: #ff8080; }
+.cal-wd:last-child { color: #80aaff; }
+.cal-days { display: grid; grid-template-columns: repeat(7,1fr); }
+.cal-day {
+  min-height: 80px; padding: 6px 4px;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.1s; position: relative;
+}
+.cal-day:nth-child(7n) { border-right: none; }
+.cal-day:hover { background: var(--primary-light); }
+.cal-day.cal-empty { background: #F8FAFC; cursor: default; pointer-events: none; }
+.cal-day.cal-today { background: #EFF4FF; }
+.cal-day.cal-past { opacity: 0.6; }
+.cal-day-num { font-size: 11px; font-weight: 800; margin-bottom: 2px; text-align: left; padding-left: 1px; }
+.cal-day.cal-sun .cal-day-num { color: var(--red); }
+.cal-day.cal-sat .cal-day-num { color: var(--primary); }
+.cal-day.cal-today .cal-day-num {
+  background: var(--primary); color: #fff;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+/* 날짜 헤더 행 (날짜 + 팀별 카운트) */
+.cal-day-header { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; flex-wrap: wrap; }
+.cal-team-badge {
+  font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 3px;
+  white-space: nowrap; line-height: 1.5;
+}
+.cal-team-badge.full { background: var(--red-light); color: var(--red); }
+.cal-team-badge.ok   { background: var(--bg); color: var(--sub); border: 1px solid var(--border); }
+.cal-cols { display: flex; gap: 2px; margin-top: 2px; }
+.cal-col-left  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cal-col-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cal-chip {
+  font-size: 8.5px; font-weight: 700; padding: 1px 3px; border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block; line-height: 1.5;
+}
+.chip-leave { background: var(--primary-light); color: var(--primary); }
+.chip-extra { background: var(--green-light); color: var(--green); }
+.chip-swap  { background: var(--purple-light); color: var(--purple); }
+/* 승인 상태별 */
+.chip-pending { background: #FECACA !important; color: #B91C1C !important; }
+.chip-approved { /* 유형 색 그대로 유지 */ }
+.chip-rejected { background: #E5E7EB !important; color: #9CA3AF !important; text-decoration: line-through; }
+.chip-mine  { outline: 1.5px solid currentColor; outline-offset: -1px; }
+.cal-more { font-size: 8px; color: var(--sub); margin-top: 1px; text-align: center; }
+.cal-add-btn {
+  position: absolute; bottom: 4px; right: 4px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--primary); color: #fff;
+  font-size: 13px; line-height: 18px; text-align: center;
+  opacity: 0; transition: opacity 0.15s;
+}
+.cal-day:hover .cal-add-btn { opacity: 1; }
+
+/* ── 내 신청 내역 탭 ── */
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-item { background: var(--surface); border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+.h-badge { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.badge-leave { background: var(--primary-light); color: var(--primary); }
+.badge-extra { background: var(--green-light); color: var(--green); }
+.badge-swap  { background: var(--purple-light); color: var(--purple); }
+.h-info { flex: 1; }
+.h-date { font-size: 13px; font-weight: 700; }
+.h-detail { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.h-status { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+.st-pending  { background: #FEF3C7; color: #D97706; }
+.st-approved { background: var(--green-light); color: var(--green); }
+.st-rejected { background: var(--red-light); color: var(--red); }
+.section-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+/* ── 모달 오버레이 ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 500; display: flex; align-items: flex-end;
+  opacity: 0; transition: opacity 0.25s;
+  pointer-events: none;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-sheet {
+  width: 100%; background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  max-height: 92vh; overflow-y: auto;
+  transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.modal-overlay.open .modal-sheet { transform: translateY(0); }
+.modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; }
+.modal-header { padding: 14px 18px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.modal-title { font-size: 17px; font-weight: 800; }
+.modal-date-badge { font-size: 12px; color: var(--sub); font-weight: 600; }
+.modal-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--bg); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* 모달 탭 */
+.modal-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.modal-tab { flex: 1; padding: 11px 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--sub); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+.modal-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.modal-body { padding: 16px; }
+.modal-pane { display: none; }
+.modal-pane.active { display: block; }
+
+/* 현황 목록 */
+.day-req-card { background: var(--bg); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+.day-req-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.day-req-info { flex: 1; }
+.day-req-name { font-size: 13px; font-weight: 700; }
+.day-req-detail { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.day-empty { text-align: center; padding: 28px 0; color: var(--sub); font-size: 13px; }
+
+/* 신청 폼 */
+.req-type-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.req-type-btn { padding: 12px 6px; border: 2px solid var(--border); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface); }
+.req-type-btn .rt-icon { font-size: 20px; margin-bottom: 3px; }
+.req-type-btn .rt-lbl { font-size: 11px; font-weight: 700; color: var(--sub); }
+.req-type-btn.active-extra { border-color: var(--green); background: var(--green-light); }
+.req-type-btn.active-extra .rt-lbl { color: var(--green); }
+.req-type-btn.active-leave { border-color: var(--primary); background: var(--primary-light); }
+.req-type-btn.active-leave .rt-lbl { color: var(--primary); }
+.req-type-btn.active-swap  { border-color: var(--purple); background: var(--purple-light); }
+.req-type-btn.active-swap  .rt-lbl { color: var(--purple); }
+.form-pane { display: none; }
+.form-pane.active { display: block; }
+.fg { margin-bottom: 13px; }
+.fl { font-size: 11px; font-weight: 700; color: var(--sub); display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.fi, .fs {
+  width: 100%; padding: 10px 13px; border: 1.5px solid var(--border); border-radius: 9px;
+  font-size: 14px; color: var(--dark); background: var(--bg); appearance: none; font-family: inherit;
+  transition: border-color 0.2s;
+}
+.fi:focus, .fs:focus { outline: none; border-color: var(--primary); background: #fff; }
+.time-row { display: flex; align-items: center; gap: 8px; }
+.time-row span { color: var(--sub); font-size: 13px; }
+.radio-row { display: flex; gap: 8px; }
+.radio-opt { flex: 1; padding: 9px; border: 1.5px solid var(--border); border-radius: 8px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.radio-opt.sel { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+.fta { width: 100%; padding: 10px 13px; border: 1.5px solid var(--border); border-radius: 9px; font-size: 13px; resize: none; height: 72px; font-family: inherit; transition: border-color 0.2s; background: var(--bg); }
+.fta:focus { outline: none; border-color: var(--primary); }
+.btn-submit { width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; transition: all 0.2s; margin-top: 4px; }
+.btn-extra-c { background: var(--green); color: #fff; }
+.btn-leave-c { background: var(--primary); color: #fff; }
+.btn-swap-c  { background: var(--purple); color: #fff; }
+
+/* 토스트 */
+.toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%); background: var(--dark); color: #fff; padding: 11px 20px; border-radius: 30px; font-size: 13px; font-weight: 600; z-index: 9999; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+.toast.show { opacity: 1; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ── 로그인 ── -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-icon">⭐</div>
+    <div class="login-title">별가람 근무 신청</div>
+    <div class="login-sub">팀과 이름을 선택하고 시작하세요</div>
+    <div class="form-group">
+      <label class="form-label">팀 선택</label>
+      <select class="form-select" id="loginTeam"><option value="">팀 선택...</option></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">이름</label>
+      <select class="form-select" id="loginName" disabled><option value="">팀 먼저 선택...</option></select>
+    </div>
+    <button class="btn-primary" onclick="doLogin()">시작하기</button>
+  </div>
+</div>
+
+<!-- ── 메인 앱 ── -->
+<div id="mainApp" class="hidden">
+
+  <!-- 헤더 -->
+  <div class="header">
+    <div>
+      <div class="header-logo">⭐ 별가람</div>
+      <div class="header-sub">근무 신청 시스템</div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="header-user" id="headerUser" onclick="doLogout()">로그아웃</div>
+  </div>
+
+  <!-- 연차 정보 바 -->
+  <div class="leave-bar">
+    <div style="margin-right:12px;">
+      <div class="leave-name" id="cardName"></div>
+      <div class="leave-team" id="cardTeam"></div>
+    </div>
+    <div class="leave-stat">
+      <div class="leave-val" id="leaveTotal">-</div>
+      <div class="leave-count" id="leaveTotalCount"></div>
+      <div class="leave-lbl">보유</div>
+    </div>
+    <div class="leave-stat">
+      <div class="leave-val" id="leaveUsed">-</div>
+      <div class="leave-count" id="leaveUsedCount"></div>
+      <div class="leave-lbl">사용</div>
+    </div>
+    <div class="leave-stat">
+      <div class="leave-val" id="leaveRemain">-</div>
+      <div class="leave-count" id="leaveRemainCount"></div>
+      <div class="leave-lbl">잔여</div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ══ 페이지 1: 달력 현황 (홈) ══ -->
+    <div id="pg-cal" class="main-page active">
+      <div class="cal-header">
+        <div class="cal-nav" onclick="calChangeMonth(-1)">‹</div>
+        <div class="cal-month-label" id="calMonthLabel"></div>
+        <div class="cal-today-btn" onclick="calGoToday()">오늘</div>
+        <div class="cal-nav" onclick="calChangeMonth(1)">›</div>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-weekdays">
+          <div class="cal-wd">일</div><div class="cal-wd">월</div><div class="cal-wd">화</div>
+          <div class="cal-wd">수</div><div class="cal-wd">목</div><div class="cal-wd">금</div><div class="cal-wd">토</div>
+        </div>
+        <div class="cal-days" id="calDays"></div>
+      </div>
+      <!-- 범례 -->
+      <div style="display:flex;gap:12px;padding:12px 16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub)"><span style="width:8px;height:8px;border-radius:2px;background:var(--primary-light);border:1px solid var(--primary);display:inline-block"></span>연차</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub)"><span style="width:8px;height:8px;border-radius:2px;background:var(--green-light);border:1px solid var(--green);display:inline-block"></span>추가근무</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub)"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple-light);border:1px solid var(--purple);display:inline-block"></span>근무교체</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub)"><span style="font-size:10px;font-weight:800;color:var(--primary)">테두리</span>=내신청</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--sub)">날짜 탭 → 현황·신청</div>
+      </div>
+    </div>
+
+    <!-- ══ 페이지 2: 내 신청 내역 ══ -->
+    <div id="pg-history" class="main-page">
+      <div class="page-pad">
+        <div class="section-title" style="margin-bottom:14px;">내 신청 내역</div>
+        <div class="history-list" id="historyList">
+          <div style="text-align:center;padding:40px;color:var(--sub);font-size:13px;">불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- 하단 탭 -->
+  <nav class="bottom-nav">
+    <button class="bnav-item active" id="bnav-cal" onclick="switchPage('cal')">
+      <span class="bnav-icon">📅</span>근무 현황
+    </button>
+    <button class="bnav-item" id="bnav-history" onclick="switchPage('history')">
+      <span class="bnav-icon">📋</span>내 신청 내역
+    </button>
+    <button class="bnav-item" onclick="goAdmin()">
+      <span class="bnav-icon">🔐</span>관리자
+    </button>
+  </nav>
+</div>
+
+<!-- ══ 날짜 클릭 모달 ══ -->
+<div class="modal-overlay" id="dayModal" onclick="closeDayModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">날짜 현황</div>
+        <div class="modal-date-badge" id="modalDateBadge"></div>
+      </div>
+      <button class="modal-close" onclick="closeDayModalForce()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="mtab-status" onclick="switchModalTab('status')">📋 이날 현황</button>
+      <button class="modal-tab" id="mtab-form"   onclick="switchModalTab('form')">✏️ 신청하기</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- 현황 패널 -->
+      <div class="modal-pane active" id="mpane-status">
+        <div id="dayStatusBody">
+          <div class="day-empty">불러오는 중...</div>
+        </div>
+      </div>
+
+      <!-- 신청 패널 -->
+      <div class="modal-pane" id="mpane-form">
+        <!-- 유형 선택 -->
+        <div class="req-type-row">
+          <div class="req-type-btn active-extra" id="rt-extra" onclick="setModalType('extra')">
+            <div class="rt-icon">⏰</div><div class="rt-lbl">추가근무</div>
+          </div>
+          <div class="req-type-btn" id="rt-leave" onclick="setModalType('leave')">
+            <div class="rt-icon">🌴</div><div class="rt-lbl">연차</div>
+          </div>
+          <div class="req-type-btn" id="rt-swap" onclick="setModalType('swap')">
+            <div class="rt-icon">🔄</div><div class="rt-lbl">근무교체</div>
+          </div>
+        </div>
+
+        <!-- 추가근무 폼 -->
+        <div class="form-pane active" id="fp-extra">
+          <div class="fg">
+            <label class="fl">날짜</label>
+            <div style="padding:10px 13px;background:var(--bg);border-radius:9px;font-size:14px;font-weight:700;color:var(--primary)" id="fpExtraDateDisplay"></div>
+          </div>
+          <div class="fg">
+            <label class="fl">시간</label>
+            <div class="time-row">
+              <input type="time" class="fi" id="fpExtraStart">
+              <span>~</span>
+              <input type="time" class="fi" id="fpExtraEnd">
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">메모</label>
+            <textarea class="fta" id="fpExtraMemo" placeholder="추가근무 사유를 입력하세요"></textarea>
+          </div>
+          <button class="btn-submit btn-extra-c" onclick="submitModal('extra')">추가근무 신청</button>
+        </div>
+
+        <!-- 연차 폼 -->
+        <div class="form-pane" id="fp-leave">
+          <div class="fg">
+            <label class="fl">날짜</label>
+            <div style="padding:10px 13px;background:var(--bg);border-radius:9px;font-size:14px;font-weight:700;color:var(--primary)" id="fpLeaveDateDisplay"></div>
+          </div>
+          <div class="fg">
+            <label class="fl">유형</label>
+            <div class="radio-row">
+              <div class="radio-opt sel" id="mLeaveAll" onclick="setModalLeaveType('all')">종일 연차</div>
+              <div class="radio-opt" id="mLeaveHour" onclick="setModalLeaveType('hour')">시간 연차</div>
+            </div>
+          </div>
+          <div class="fg hidden" id="mLeaveTimeRow">
+            <label class="fl">시간</label>
+            <div class="time-row">
+              <input type="time" class="fi" id="fpLeaveStart">
+              <span>~</span>
+              <input type="time" class="fi" id="fpLeaveEnd">
+            </div>
+          </div>
+          <div class="fg">
+            <label class="fl">메모 (선택)</label>
+            <textarea class="fta" id="fpLeaveMemo" placeholder="연차 사유를 입력하세요"></textarea>
+          </div>
+          <button class="btn-submit btn-leave-c" onclick="submitModal('leave')">연차 신청</button>
+        </div>
+
+        <!-- 근무교체 폼 -->
+        <div class="form-pane" id="fp-swap">
+          <div class="fg">
+            <label class="fl">날짜</label>
+            <div style="padding:10px 13px;background:var(--bg);border-radius:9px;font-size:14px;font-weight:700;color:var(--primary)" id="fpSwapDateDisplay"></div>
+          </div>
+          <div class="fg">
+            <label class="fl">교체 상대</label>
+            <select class="fs" id="fpSwapTarget"><option value="">직원 선택...</option></select>
+          </div>
+          <div class="fg">
+            <label class="fl">메모</label>
+            <textarea class="fta" id="fpSwapMemo" placeholder="교체 사유 및 세부 내용을 입력하세요"></textarea>
+          </div>
+          <button class="btn-submit btn-swap-c" onclick="submitModal('swap')">근무교체 신청</button>
+        </div>
+      </div><!-- /mpane-form -->
+
+    </div><!-- /modal-body -->
+  </div><!-- /modal-sheet -->
+</div><!-- /modal-overlay -->
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, collection, getDocs, addDoc, query, where, orderBy, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBCFo6KiIrtAF21EWdT-lhmEEloHrX-0w8",
+  authDomain: "precheck-sarang.firebaseapp.com",
+  projectId: "precheck-sarang",
+  storageBucket: "precheck-sarang.firebasestorage.app",
+  messagingSenderId: "259948255177",
+  appId: "1:259948255177:web:ed3c4f1b0b860715387a18",
+  measurementId: "G-PPL5B6MMG2"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ── 상태 ──
+let currentUser = null;
+let staffMap = {}, allStaff = [];
+let allRequests = [];          // 전체 직원 신청 (달력용)
+let teamLimits = {};           // { '진료팀': { maxLeave:2, maxExtra:99, maxSwap:99 }, ... }
+let calYear, calMonth;
+let modalDate = '';
+let modalType = 'extra';
+let modalLeaveType = 'all';
+
+const NOW = new Date();
+calYear = NOW.getFullYear();
+calMonth = NOW.getMonth();
+
+// ── 유틸 ──
+window.showToast = t => {
+  const el = document.getElementById('toast');
+  el.textContent = t; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+};
+const today = () => NOW.toISOString().slice(0,10);
+const pad = n => String(n).padStart(2,'0');
+
+// ── staff 로드 ──
+async function loadStaff() {
+  try {
+    const snap = await getDocs(collection(db, 'staff_list'));
+    staffMap = {}; allStaff = [];
+    snap.forEach(d => {
+      const s = { id: d.id, ...d.data() };
+      allStaff.push(s);
+      if (!staffMap[s.team]) staffMap[s.team] = [];
+      staffMap[s.team].push(s.name);
+    });
+  } catch {
+    staffMap = { '진료팀':['김민지','이수연','박지현'], '데스크팀':['정유진','한소희'], '상담팀':['오채원','신예린'] };
+    allStaff = [
+      {id:'1',team:'진료팀',name:'김민지',type:'상근',joinDate:'2023-03-01',initLeave:15},
+      {id:'2',team:'진료팀',name:'이수연',type:'상근',joinDate:'2022-01-15',initLeave:15},
+      {id:'3',team:'데스크팀',name:'정유진',type:'주4일',joinDate:'2024-06-01',initLeave:11},
+      {id:'4',team:'상담팀',name:'오채원',type:'상근',joinDate:'2023-09-01',initLeave:15},
+      {id:'5',team:'상담팀',name:'신예린',type:'상근',joinDate:'2024-02-15',initLeave:11},
+    ];
+  }
+  const sel = document.getElementById('loginTeam');
+  sel.innerHTML = '<option value="">팀 선택...</option>';
+  Object.keys(staffMap).forEach(t => sel.innerHTML += `<option value="${t}">${t}</option>`);
+}
+
+document.getElementById('loginTeam').addEventListener('change', function() {
+  const ns = document.getElementById('loginName');
+  ns.innerHTML = '<option value="">이름 선택...</option>';
+  if (this.value && staffMap[this.value]) {
+    staffMap[this.value].forEach(n => ns.innerHTML += `<option value="${n}">${n}</option>`);
+    ns.disabled = false;
+  } else { ns.disabled = true; }
+});
+
+// ── 로그인 ──
+window.doLogin = async function() {
+  const team = document.getElementById('loginTeam').value;
+  const name = document.getElementById('loginName').value;
+  if (!team || !name) { showToast('팀과 이름을 선택해주세요'); return; }
+
+  currentUser = allStaff.find(s => s.team === team && s.name === name)
+    || { team, name, type:'상근', joinDate: today(), initLeave:15, id: null };
+
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  document.getElementById('headerUser').textContent = `${name} · 로그아웃`;
+  document.getElementById('cardName').textContent = name;
+  document.getElementById('cardTeam').textContent = team;
+
+  populateSwapTarget();
+  await Promise.all([loadAllRequests(), loadUserLeave(), loadTeamLimits()]);
+  renderCalendar();
+  loadHistory();
+};
+
+window.doLogout = () => {
+  currentUser = null;
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginTeam').value = '';
+  document.getElementById('loginName').innerHTML = '<option value="">팀 먼저 선택...</option>';
+  document.getElementById('loginName').disabled = true;
+};
+
+// ── 팀 제한 로드 ──
+async function loadTeamLimits() {
+  try {
+    const snap = await getDocs(collection(db, 'team_limits'));
+    teamLimits = {};
+    snap.forEach(d => { teamLimits[d.id] = d.data(); });
+  } catch {
+    teamLimits = {
+      '진료팀':   { maxLeave: 2, maxExtra: 99, maxSwap: 99 },
+      '데스크팀': { maxLeave: 1, maxExtra: 99, maxSwap: 99 },
+      '상담팀':   { maxLeave: 1, maxExtra: 99, maxSwap: 99 },
+    };
+  }
+}
+
+// 특정 날짜+팀+유형의 현재 신청 수 (rejected 제외)
+function countTeamReqs(date, team, type) {
+  return allRequests.filter(r =>
+    r.date === date && r.staffTeam === team && r.type === type && r.status !== 'rejected'
+  ).length;
+}
+
+// 내 신청 포함 여부 확인
+function myReqExists(date, type) {
+  return allRequests.some(r =>
+    r.date === date && r.staffName === currentUser?.name && r.type === type && r.status !== 'rejected'
+  );
+}
+
+// 신청 가능 여부 체크 → { ok: bool, reason: string }
+function checkLimit(date, type) {
+  const team = currentUser?.team;
+  const lim = teamLimits[team];
+  if (!lim) return { ok: true };
+  const maxMap = { leave: lim.maxLeave ?? 99, extra: lim.maxExtra ?? 99, swap: lim.maxSwap ?? 99 };
+  const max = maxMap[type] ?? 99;
+  if (max >= 99) return { ok: true };
+  const cur = countTeamReqs(date, team, type);
+  // 이미 내 신청이 있으면 카운트에 포함 → 차단 안 함
+  if (myReqExists(date, type)) return { ok: true };
+  if (cur >= max) {
+    const typeLabel = type === 'leave' ? '연차' : type === 'extra' ? '추가근무' : '근무교체';
+    return { ok: false, reason: `${team} ${typeLabel} 신청이 마감되었습니다 (${cur}/${max}명)` };
+  }
+  return { ok: true };
+}
+async function loadAllRequests() {
+  try {
+    const snap = await getDocs(query(collection(db, 'schedule_requests'), orderBy('createdAt','desc')));
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    allRequests = [
+      {id:'r1',type:'leave',staffName:'김민지',staffTeam:'진료팀',date:today(),leaveSubType:'all',memo:'개인 사정',status:'pending'},
+      {id:'r2',type:'extra',staffName:'이수연',staffTeam:'진료팀',date:today(),startTime:'18:00',endTime:'20:00',memo:'월말 정산',status:'approved'},
+      {id:'r3',type:'swap',staffName:'오채원',staffTeam:'상담팀',date:today(),swapTarget:'신예린',memo:'개인 일정',status:'pending'},
+    ];
+  }
+}
+
+// ── 연차 계산 ──
+async function loadUserLeave() {
+  if (!currentUser) return;
+  const join = currentUser.joinDate ? new Date(currentUser.joinDate) : new Date();
+  const months = (NOW.getFullYear()-join.getFullYear())*12 + (NOW.getMonth()-join.getMonth());
+  const totalDays = currentUser.initLeave != null ? currentUser.initLeave : (months < 12 ? 11 : 15);
+  const mpd = currentUser.type === '주4일' ? 444 : 480;
+
+  let usedMin = 0;
+  try {
+    const snap = await getDocs(query(collection(db,'schedule_requests'),
+      where('staffName','==',currentUser.name), where('type','==','leave'), where('status','==','approved')));
+    snap.forEach(d => {
+      const r = d.data();
+      if (r.leaveSubType === 'hour' && r.startTime && r.endTime) {
+        const [sh,sm] = r.startTime.split(':').map(Number);
+        const [eh,em] = r.endTime.split(':').map(Number);
+        usedMin += (eh*60+em)-(sh*60+sm);
+      } else { usedMin += (r.leaveAmount||1)*mpd; }
+    });
+  } catch {}
+
+  const totalMin = totalDays * mpd;
+  const remainMin = totalMin - usedMin;
+
+  const fmt = m => { const h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return (m<0?'-':'')+h+'h'+(mn?' '+mn+'m':''); };
+  const fmtC = m => {
+    if (m<=0) return '(0개)';
+    const d=Math.floor(m/mpd), r=m%mpd, rh=Math.floor(r/60), rm=r%60;
+    return '('+d+'개'+(rh||rm?' '+(rh?rh+'h':'')+(rm?rm+'m':''):'')+')';
+  };
+
+  document.getElementById('leaveTotal').textContent = fmt(totalMin);
+  document.getElementById('leaveTotalCount').textContent = fmtC(totalMin);
+  document.getElementById('leaveUsed').textContent = fmt(usedMin);
+  document.getElementById('leaveUsedCount').textContent = fmtC(usedMin);
+  document.getElementById('leaveRemain').textContent = fmt(remainMin);
+  document.getElementById('leaveRemainCount').textContent = fmtC(remainMin);
+}
+
+// ── 교체 대상 목록 ──
+function populateSwapTarget() {
+  const sel = document.getElementById('fpSwapTarget');
+  sel.innerHTML = '<option value="">직원 선택...</option>';
+  allStaff.forEach(s => {
+    if (s.name !== currentUser?.name)
+      sel.innerHTML += `<option value="${s.name}">[${s.team}] ${s.name}</option>`;
+  });
+}
+
+// ── 관리자 페이지 이동 ──
+window.goAdmin = () => {
+  window.location.href = '../admin/index.html';
+};
+
+// ── 페이지 전환 ──
+window.switchPage = function(page) {
+  ['cal','history'].forEach(p => {
+    document.getElementById(`pg-${p}`).classList.toggle('active', p === page);
+    document.getElementById(`bnav-${p}`).classList.toggle('active', p === page);
+  });
+};
+
+// ── 달력 ──
+window.calChangeMonth = dir => {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0)  { calMonth = 11; calYear--; }
+  renderCalendar();
+};
+window.calGoToday = () => {
+  calYear = NOW.getFullYear(); calMonth = NOW.getMonth();
+  renderCalendar();
+};
+
+function renderCalendar() {
+  document.getElementById('calMonthLabel').textContent = `${calYear}년 ${calMonth+1}월`;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const todayStr = today();
+
+  const container = document.getElementById('calDays');
+  container.innerHTML = '';
+
+  for (let i = 0; i < firstDay; i++)
+    container.innerHTML += '<div class="cal-day cal-empty"></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${pad(calMonth+1)}-${pad(d)}`;
+    const dow = new Date(calYear, calMonth, d).getDay();
+    const dayReqs = allRequests.filter(r => r.date === dateStr);
+    const isPast = dateStr < todayStr;
+
+    const cls = ['cal-day',
+      dow===0?'cal-sun':'', dow===6?'cal-sat':'',
+      dateStr===todayStr?'cal-today':'',
+      isPast?'cal-past':'',
+    ].filter(Boolean).join(' ');
+
+    // 좌측: 연차 + 근무교체 / 우측: 추가근무
+    const leftReqs  = dayReqs.filter(r => r.type === 'leave' || r.type === 'swap');
+    const rightReqs = dayReqs.filter(r => r.type === 'extra');
+    const totalCount = dayReqs.length;
+
+    function makeChip(r) {
+      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : 'chip-swap';
+      const stClass = r.status==='pending' ? 'chip-pending' : r.status==='rejected' ? 'chip-rejected' : 'chip-approved ' + typeClass;
+      const mine = r.staffName === currentUser?.name ? ' chip-mine' : '';
+      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : '🔄';
+      // pending일 때는 유형별 색 무시 (빨간), rejected는 회색 취소선, approved는 유형 색
+      const cls = r.status === 'approved'
+        ? `cal-chip ${typeClass}${mine}`
+        : r.status === 'rejected'
+        ? `cal-chip chip-rejected${mine}`
+        : `cal-chip chip-pending${mine}`;
+      return `<span class="${cls}">${icon}${r.staffName}</span>`;
+    }
+
+    const maxPerCol = 3;
+    const leftChips  = leftReqs.slice(0, maxPerCol).map(makeChip).join('');
+    const rightChips = rightReqs.slice(0, maxPerCol).map(makeChip).join('');
+    const leftMore   = leftReqs.length  > maxPerCol ? `<span class="cal-more">+${leftReqs.length - maxPerCol}</span>` : '';
+    const rightMore  = rightReqs.length > maxPerCol ? `<span class="cal-more">+${rightReqs.length - maxPerCol}</span>` : '';
+
+    const colsDivider = (leftReqs.length > 0 && rightReqs.length > 0)
+      ? `<div style="width:1px;background:var(--border);flex-shrink:0;margin-top:2px"></div>` : '';
+
+    // 날짜 헤더: 날짜 번호 + 팀별 카운트 배지
+    const myTeam = currentUser?.team;
+    const lim = myTeam ? (teamLimits[myTeam] || {}) : {};
+
+    // 각 유형별 내 팀 현황
+    function teamBadge(type, icon) {
+      const max = type === 'leave' ? (lim.maxLeave ?? 99) : type === 'extra' ? (lim.maxExtra ?? 99) : (lim.maxSwap ?? 99);
+      if (!myTeam || max >= 99) return '';
+      const cur = allRequests.filter(r => r.date === dateStr && r.staffTeam === myTeam && r.type === type && r.status !== 'rejected').length;
+      const isFull = cur >= max;
+      return `<span class="cal-team-badge ${isFull ? 'full' : 'ok'}">${icon}${cur}/${max}</span>`;
+    }
+
+    // 팀 전체 현황 배지 (진료N/데스크N 형식)
+    const teams = [...new Set(allRequests.filter(r => r.date === dateStr && r.type === 'leave').map(r => r.staffTeam))];
+    const teamCountBadges = teams.map(t => {
+      const cnt = allRequests.filter(r => r.date === dateStr && r.staffTeam === t && r.type === 'leave' && r.status !== 'rejected').length;
+      const tLim = teamLimits[t];
+      const max = tLim?.maxLeave ?? 99;
+      const full = max < 99 && cnt >= max;
+      const shortName = t.replace('팀','');
+      return `<span class="cal-team-badge ${full ? 'full' : 'ok'}">${shortName}${cnt}${max < 99 ? '/'+max : ''}</span>`;
+    }).join('');
+
+    container.innerHTML += `
+      <div class="${cls}" onclick="openDayModal('${dateStr}')">
+        <div class="cal-day-header">
+          <div class="cal-day-num">${d}</div>
+          ${teamCountBadges}
+        </div>
+        <div class="cal-cols">
+          <div class="cal-col-left">${leftChips}${leftMore}</div>
+          ${colsDivider}
+          <div class="cal-col-right">${rightChips}${rightMore}</div>
+        </div>
+        <div class="cal-add-btn">+</div>
+      </div>`;
+  }
+}
+
+// ── 모달 열기 ──
+window.openDayModal = function(dateStr) {
+  modalDate = dateStr;
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  document.getElementById('modalTitle').textContent = `${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+  document.getElementById('modalDateBadge').textContent = dateStr;
+
+  // 날짜 표시 업데이트
+  ['Extra','Leave','Swap'].forEach(k => {
+    const el = document.getElementById(`fp${k}DateDisplay`);
+    if (el) el.textContent = dateStr;
+  });
+
+  // 현황 탭 먼저 열기
+  switchModalTab('status');
+  renderDayStatus(dateStr);
+
+  document.getElementById('dayModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeDayModal = e => {
+  if (e.target === document.getElementById('dayModal')) closeDayModalForce();
+};
+window.closeDayModalForce = () => {
+  document.getElementById('dayModal').classList.remove('open');
+  document.body.style.overflow = '';
+};
+
+// ── 모달 탭 전환 ──
+window.switchModalTab = tab => {
+  ['status','form'].forEach(t => {
+    document.getElementById(`mtab-${t}`).classList.toggle('active', t===tab);
+    document.getElementById(`mpane-${t}`).classList.toggle('active', t===tab);
+  });
+  // 신청 탭 열릴 때 기본 유형 제한 체크
+  if (tab === 'form') checkAndUpdateFormType(modalType);
+};
+
+// 유형 선택 시 제한 체크해서 버튼/폼 상태 업데이트
+function checkAndUpdateFormType(type) {
+  const check = checkLimit(modalDate, type);
+  const submitBtnMap = { extra: '.btn-extra-c', leave: '.btn-leave-c', swap: '.btn-swap-c' };
+  const btn = document.querySelector(submitBtnMap[type]);
+  const warningId = 'modalLimitWarning';
+  let warn = document.getElementById(warningId);
+
+  if (!check.ok) {
+    if (!warn) {
+      warn = document.createElement('div');
+      warn.id = warningId;
+      warn.style.cssText = 'background:#FEE2E2;color:#B91C1C;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:12px;text-align:center';
+      document.getElementById(`fp-${type}`)?.prepend(warn);
+    }
+    warn.textContent = '🚫 ' + check.reason;
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+  } else {
+    document.querySelectorAll(`#${warningId}`).forEach(el => el.remove());
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+// ── 이날 현황 렌더 ──
+function renderDayStatus(dateStr) {
+  const dayReqs = allRequests.filter(r => r.date === dateStr);
+  const body = document.getElementById('dayStatusBody');
+
+  if (!dayReqs.length) {
+    body.innerHTML = `
+      <div class="day-empty">이 날짜에 신청 내역이 없습니다<br>
+      <span style="font-size:12px;margin-top:6px;display:block;">
+        <button onclick="switchModalTab('form')" style="color:var(--primary);font-weight:700;border:none;background:none;cursor:pointer;font-size:12px">신청하기 →</button>
+      </span></div>`;
+    return;
+  }
+
+  const sections = [
+    { type:'leave', icon:'🌴', label:'연차' },
+    { type:'extra', icon:'⏰', label:'추가근무' },
+    { type:'swap',  icon:'🔄', label:'근무교체' },
+  ];
+  let html = '';
+  sections.forEach(({ type, icon, label }) => {
+    const reqs = dayReqs.filter(r => r.type === type);
+    if (!reqs.length) return;
+    html += `<div style="font-size:11px;font-weight:800;color:var(--sub);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">${icon} ${label}</div>`;
+    reqs.forEach(r => {
+      const dotColor = type==='leave'?'var(--primary)':type==='extra'?'var(--green)':'var(--purple)';
+      const detail = type==='leave'
+        ? (r.leaveSubType==='all'?'종일':`${r.startTime||''}~${r.endTime||''}`)
+        : type==='extra' ? `${r.startTime}~${r.endTime}`
+        : `↔ ${r.swapTarget}`;
+      const stCls = r.status==='approved'?'st-approved':r.status==='rejected'?'st-rejected':'st-pending';
+      const stLbl = r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중';
+      const isMe = r.staffName === currentUser?.name;
+      html += `
+        <div class="day-req-card" style="${isMe?'border:1.5px solid var(--primary);background:var(--primary-light)':''}">
+          <div class="day-req-dot" style="background:${dotColor}"></div>
+          <div class="day-req-info">
+            <div class="day-req-name">${r.staffName} <span style="font-size:10px;color:var(--sub);font-weight:400">${r.staffTeam}</span>${isMe?' <span style="font-size:10px;color:var(--primary);font-weight:700">나</span>':''}</div>
+            <div class="day-req-detail">${detail}${r.memo?' · '+r.memo:''}</div>
+          </div>
+          <span class="h-status ${stCls}">${stLbl}</span>
+        </div>`;
+    });
+  });
+
+  html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);text-align:center">
+    <button onclick="switchModalTab('form')" style="color:var(--primary);font-weight:700;border:none;background:none;cursor:pointer;font-size:13px">+ 이 날짜에 신청하기</button>
+  </div>`;
+  body.innerHTML = html;
+}
+
+// ── 모달 신청 유형 전환 ──
+window.setModalType = type => {
+  modalType = type;
+  ['extra','leave','swap'].forEach(t => {
+    const btn = document.getElementById(`rt-${t}`);
+    btn.className = 'req-type-btn';
+    if (t === type) btn.classList.add(`active-${t}`);
+    document.getElementById(`fp-${t}`).classList.toggle('active', t===type);
+  });
+  // 경고 초기화 후 제한 체크
+  document.querySelectorAll('#modalLimitWarning').forEach(el => el.remove());
+  checkAndUpdateFormType(type);
+};
+
+window.setModalLeaveType = t => {
+  modalLeaveType = t;
+  document.getElementById('mLeaveAll').classList.toggle('sel', t==='all');
+  document.getElementById('mLeaveHour').classList.toggle('sel', t==='hour');
+  document.getElementById('mLeaveTimeRow').classList.toggle('hidden', t!=='hour');
+};
+
+// ── 신청 제출 ──
+window.submitModal = async function(type) {
+  if (!currentUser) return;
+
+  // 제한 재확인 (버튼 우회 방지)
+  const limitCheck = checkLimit(modalDate, type);
+  if (!limitCheck.ok) { showToast('🚫 ' + limitCheck.reason); return; }
+  const data = {
+    type, staffName: currentUser.name, staffTeam: currentUser.team,
+    status: 'pending', date: modalDate, createdAt: serverTimestamp(),
+  };
+
+  if (type === 'extra') {
+    const s = document.getElementById('fpExtraStart').value;
+    const e = document.getElementById('fpExtraEnd').value;
+    if (!s || !e) { showToast('시간을 입력해주세요'); return; }
+    data.startTime = s; data.endTime = e;
+    data.memo = document.getElementById('fpExtraMemo').value;
+  } else if (type === 'leave') {
+    data.leaveSubType = modalLeaveType;
+    data.memo = document.getElementById('fpLeaveMemo').value;
+    if (modalLeaveType === 'hour') {
+      const s = document.getElementById('fpLeaveStart').value;
+      const e = document.getElementById('fpLeaveEnd').value;
+      if (!s || !e) { showToast('시간을 입력해주세요'); return; }
+      data.startTime = s; data.endTime = e; data.leaveAmount = 0.5;
+    } else { data.leaveAmount = 1; }
+  } else if (type === 'swap') {
+    const target = document.getElementById('fpSwapTarget').value;
+    if (!target) { showToast('교체 상대를 선택해주세요'); return; }
+    data.swapTarget = target;
+    data.memo = document.getElementById('fpSwapMemo').value;
+  }
+
+  try {
+    await addDoc(collection(db, 'schedule_requests'), data);
+    allRequests.unshift({ ...data, id: Date.now().toString(), createdAt: null });
+    showToast('✅ 신청이 완료되었습니다');
+    // 폼 초기화
+    ['fpExtraStart','fpExtraEnd','fpExtraMemo','fpLeaveStart','fpLeaveEnd','fpLeaveMemo','fpSwapMemo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    document.getElementById('fpSwapTarget').value = '';
+    setModalLeaveType('all');
+    // 현황으로 전환
+    renderDayStatus(modalDate);
+    switchModalTab('status');
+    renderCalendar();
+    await loadUserLeave();
+    loadHistory();
+  } catch(e) {
+    console.error(e);
+    showToast('❌ 오류가 발생했습니다');
+  }
+};
+
+// ── 내 신청 내역 ──
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  try {
+    const snap = await getDocs(query(collection(db,'schedule_requests'),
+      where('staffName','==',currentUser.name), orderBy('createdAt','desc')));
+    if (snap.empty) { list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">신청 내역이 없습니다</div>'; return; }
+    list.innerHTML = '';
+    snap.forEach(d => list.appendChild(renderHistItem({ id:d.id, ...d.data() })));
+  } catch {
+    list.innerHTML = `
+      <div class="history-item">
+        <span class="h-badge badge-leave">연차</span>
+        <div class="h-info"><div class="h-date">${today()} · 종일</div><div class="h-detail">개인 사정</div></div>
+        <span class="h-status st-approved">✓ 승인</span>
+      </div>`;
+  }
+}
+
+function renderHistItem(r) {
+  const div = document.createElement('div');
+  div.className = 'history-item';
+  const bc = r.type==='extra'?'badge-extra':r.type==='leave'?'badge-leave':'badge-swap';
+  const tl = r.type==='extra'?'추가근무':r.type==='leave'?'연차':'근무교체';
+  const sc = r.status==='approved'?'st-approved':r.status==='rejected'?'st-rejected':'st-pending';
+  const sl = r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중';
+  let detail = r.date||'';
+  if (r.type==='extra') detail += ` · ${r.startTime}~${r.endTime}`;
+  else if (r.type==='leave') detail += ` · ${r.leaveSubType==='all'?'종일':(r.startTime+'~'+r.endTime)}`;
+  else if (r.type==='swap') detail += ` · ↔${r.swapTarget}`;
+  div.innerHTML = `
+    <span class="h-badge ${bc}">${tl}</span>
+    <div class="h-info"><div class="h-date">${detail}</div><div class="h-detail">${r.memo||''}</div></div>
+    <span class="h-status ${sc}">${sl}</span>`;
+  return div;
+}
+
+// ── 초기화 ──
+loadStaff();
+</script>
+</body>
+</html>
