@@ -980,7 +980,7 @@
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, collection, getDocs, updateDoc, addDoc, doc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, writeBatch }
+  query, where, orderBy, serverTimestamp, writeBatch, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -1004,6 +1004,7 @@ let teamList = [];   // [{ id, name, order }] - team_list 컬렉션
 let dateLimits = {}; // { 'YYYY-MM-DD': { '팀명': 연차제한수 } } - date_limits 컬렉션
 let notices = [];    // [{ id, month, text, done, ts, comments:[] }] - notices 컬렉션
 let noticeMonth = ''; // 선택된 공지 월 (YYYY-MM)
+let unsubRequests = null, unsubStaff = null, unsubNotices = null; // 실시간 구독 해제 함수
 let calYear, calMonth;
 let tlYear, tlMonth, tlModalDate = '';
 let editingStaff = {};
@@ -1041,25 +1042,66 @@ window.doAdminLogin = function() {
 };
 
 window.doLogout = function() {
+  // 전체 실시간 구독 해제
+  [unsubRequests, unsubStaff, unsubNotices].forEach(u => { if (u) u(); });
+  unsubRequests = unsubStaff = unsubNotices = null;
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('pwInput').value = '';
 };
 
 async function initAdmin() {
-  await Promise.all([loadAllRequests(), loadAllStaff(), loadTeamLimits(), loadDateLimits(), loadNotices()]);
+  // 정적 데이터 먼저 로드 (팀/제한)
+  await Promise.all([loadTeamLimits(), loadDateLimits()]);
   await loadTeamList();
-  renderCalendar();
-  renderLeaveTable();
-  renderStaffGrid();
-  renderTeamLimitCalendar();
-  updateStats();
-  document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
-  // 공지/추가근무 월 기본값
+
+  // 월 기본값 등 UI 초기화 (구독 콜백이 참조하므로 먼저 설정)
   const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   noticeMonth = ym;
   document.getElementById('noticeMonth').value = ym;
+  document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
   populateOtMonths();
+
+  // 실시간 구독 시작 (schedule_requests / staff_list / notices)
+  subscribeAdmin();
+}
+
+// ─── 전체 실시간 구독 ───
+function subscribeAdmin() {
+  // schedule_requests
+  if (unsubRequests) unsubRequests();
+  unsubRequests = onSnapshot(query(collection(db, 'schedule_requests'), orderBy('createdAt', 'desc')), snap => {
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderCalendar();
+    loadDateRequests();
+    renderLeaveTable();
+    updateStats();
+    renderOvertimePage();
+    if (selectedLeaveStaffId) selectLeaveStaff(selectedLeaveStaffId);
+  }, err => console.error(err));
+
+  // staff_list
+  if (unsubStaff) unsubStaff();
+  unsubStaff = onSnapshot(collection(db, 'staff_list'), snap => {
+    allStaff = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderStaffGrid();
+    renderLeaveTable();
+    renderCalendar();
+  }, err => console.error(err));
+
+  // notices (+ 댓글 서브컬렉션)
+  if (unsubNotices) unsubNotices();
+  unsubNotices = onSnapshot(collection(db, 'notices'), async snap => {
+    const arr = snap.docs.map(d => ({ id: d.id, ...d.data(), comments: [] }));
+    for (const n of arr) {
+      try {
+        const cs = await getDocs(collection(db, 'notices', n.id, 'comments'));
+        n.comments = cs.docs.map(c => ({ id: c.id, ...c.data() }));
+      } catch(e) { n.comments = []; }
+    }
+    notices = arr;
+    renderNoticePage();
+  }, err => console.error(err));
 }
 
 // ─── 데이터 로드 ───

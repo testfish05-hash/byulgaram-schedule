@@ -335,6 +335,19 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
       </div>
     </div>
 
+    <!-- ══ 페이지 3: 공지사항 ══ -->
+    <div id="pg-notice" class="main-page">
+      <div class="page-pad">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="section-title" style="margin:0">📢 공지사항</div>
+          <input type="month" id="noticeMonth" class="form-input" style="width:150px;padding:8px 10px" onchange="onStaffNoticeMonthChange()">
+        </div>
+        <div id="staffNoticeList" style="display:flex;flex-direction:column;gap:10px">
+          <div style="text-align:center;padding:40px;color:var(--sub);font-size:13px;">불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /main -->
 
   <!-- 하단 탭 -->
@@ -344,6 +357,9 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     </button>
     <button class="bnav-item" id="bnav-history" onclick="switchPage('history')">
       <span class="bnav-icon">📋</span>내 신청 내역
+    </button>
+    <button class="bnav-item" id="bnav-notice" onclick="switchPage('notice')">
+      <span class="bnav-icon">📢</span>공지사항
     </button>
     <button class="bnav-item" onclick="goAdmin()">
       <span class="bnav-icon">🔐</span>관리자
@@ -507,6 +523,9 @@ let currentUser = null;
 let staffMap = {}, allStaff = [];
 let allRequests = [];          // 전체 직원 신청 (달력용)
 let unsubscribeRequests = null; // schedule_requests 실시간 구독 해제 함수
+let notices = [];              // 공지사항 (+ comments)
+let noticeMonth = '';          // 선택된 공지 월
+let unsubscribeNotices = null; // notices 실시간 구독 해제 함수
 let dateLimits = {};           // { 'YYYY-MM-DD': { '팀명': 연차제한수 } } - date_limits 컬렉션
 let calYear, calMonth;
 let modalDate = '';
@@ -591,13 +610,18 @@ window.doLogin = async function() {
 
   populateSwapTarget();
   await Promise.all([loadDateLimits(), loadTeamLimits()]);
+  // 공지 월 기본값
+  noticeMonth = `${NOW.getFullYear()}-${pad(NOW.getMonth()+1)}`;
+  document.getElementById('noticeMonth').value = noticeMonth;
   // 실시간 구독 시작 (snapshot 수신 시 renderCalendar/loadHistory/loadUserLeave 자동 호출)
   subscribeRequests();
+  subscribeNotices();
 };
 
 window.doLogout = () => {
-  // 실시간 구독 해제
+  // 전체 실시간 구독 해제
   if (unsubscribeRequests) { unsubscribeRequests(); unsubscribeRequests = null; }
+  if (unsubscribeNotices) { unsubscribeNotices(); unsubscribeNotices = null; }
   currentUser = null;
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -785,10 +809,79 @@ window.goAdmin = () => {
 
 // ── 페이지 전환 ──
 window.switchPage = function(page) {
-  ['cal','history'].forEach(p => {
+  ['cal','history','notice'].forEach(p => {
     document.getElementById(`pg-${p}`).classList.toggle('active', p === page);
     document.getElementById(`bnav-${p}`).classList.toggle('active', p === page);
   });
+  if (page === 'notice') renderStaffNotice();
+};
+
+// ── 공지사항 (실시간) ──
+function subscribeNotices() {
+  if (unsubscribeNotices) { unsubscribeNotices(); unsubscribeNotices = null; }
+  unsubscribeNotices = onSnapshot(collection(db, 'notices'), async snap => {
+    const arr = snap.docs.map(d => ({ id: d.id, ...d.data(), comments: [] }));
+    for (const n of arr) {
+      try {
+        const cs = await getDocs(collection(db, 'notices', n.id, 'comments'));
+        n.comments = cs.docs.map(c => ({ id: c.id, ...c.data() }));
+      } catch(e) { n.comments = []; }
+    }
+    notices = arr;
+    renderStaffNotice();
+  }, err => console.error(err));
+}
+
+window.onStaffNoticeMonthChange = function() {
+  noticeMonth = document.getElementById('noticeMonth').value;
+  renderStaffNotice();
+};
+
+function renderStaffNotice() {
+  const box = document.getElementById('staffNoticeList');
+  if (!box) return;
+  if (!noticeMonth) noticeMonth = document.getElementById('noticeMonth').value || today().slice(0,7);
+  const list = notices.filter(n => n.month === noticeMonth).sort((a,b) => (a.ts||0) - (b.ts||0));
+  if (!list.length) {
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">이 달의 공지가 없습니다</div>';
+    return;
+  }
+  box.innerHTML = list.map(n => {
+    const comments = (n.comments || []).slice().sort((a,b) => (a.ts||0) - (b.ts||0));
+    const cHtml = comments.length
+      ? comments.map(c => `<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--border)"><b style="color:var(--primary)">${(c.author||'익명')}</b> <span>${(c.text||'').replace(/</g,'&lt;')}</span></div>`).join('')
+      : '<div style="font-size:12px;color:var(--sub);padding:6px 0">댓글 없음</div>';
+    return `
+      <div style="background:var(--surface);border-radius:12px;padding:13px 15px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+        <div style="${n.done ? 'text-decoration:line-through;color:var(--sub)' : ''}">
+          ${n.title ? `<div style="font-size:14px;font-weight:800">${n.done ? '✅ ' : ''}${(n.title||'').replace(/</g,'&lt;')}</div>` : ''}
+          ${n.text ? `<div style="font-size:13px;color:var(--sub);margin-top:2px;white-space:pre-wrap">${(n.text||'').replace(/</g,'&lt;')}</div>` : ''}
+        </div>
+        <div style="margin-top:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--sub);margin-bottom:2px">💬 댓글 (${comments.length})</div>
+          ${cHtml}
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input class="form-input" id="snc-${n.id}" placeholder="댓글 입력" style="flex:1;padding:8px 10px;font-size:13px" onkeydown="if(event.key==='Enter') addStaffComment('${n.id}')">
+            <button class="btn-primary" style="width:auto;padding:8px 14px;font-size:13px" onclick="addStaffComment('${n.id}')">등록</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.addStaffComment = async function(noticeId) {
+  const input = document.getElementById(`snc-${noticeId}`);
+  const text = input.value.trim();
+  if (!text) return;
+  const c = { author: currentUser?.name || '직원', text, ts: Date.now(), createdAt: serverTimestamp() };
+  try {
+    const ref = await addDoc(collection(db, 'notices', noticeId, 'comments'), c);
+    c.id = ref.id;
+  } catch(e) { c.id = 'c' + Date.now(); }
+  const n = notices.find(x => x.id === noticeId);
+  if (n) { n.comments = n.comments || []; n.comments.push(c); }
+  input.value = '';
+  renderStaffNotice();
 };
 
 // ── 달력 ──
