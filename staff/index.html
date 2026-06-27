@@ -908,7 +908,11 @@ function renderRoster() {
     return rosterOnDuty(t, todayTeams) || extraNames.has(s.name);
   }).map(s => {
     const onDuty = rosterOnDuty(s.team || '', todayTeams);
-    return { name: s.name, team: s.team || '', status: statusOf(s.name, onDuty), group: rosterGroupOf(s.team) };
+    const status = statusOf(s.name, onDuty);
+    const extraReq = status === 'extra'
+      ? allRequests.find(r => r.staffName === s.name && r.date === dateStr && r.type === 'extra' && r.status === 'approved')
+      : null;
+    return { name: s.name, team: s.team || '', status, group: rosterGroupOf(s.team), extraReq };
   });
 
   // 그룹 표시 순서: 상담 → 진료 → 데스크 → 서포트 → 상근팀 → 기타
@@ -931,14 +935,20 @@ function renderRoster() {
 
   const meta = {
     work:  { icon:'',    bg:'#fff',               dim:false },
-    extra: { icon:' ⏰', bg:'var(--green-light)', dim:false },
+    extra: { icon:'',    bg:'#fff',               dim:false },
     leave: { icon:' 🌴', bg:'var(--primary-light)', dim:true },
     off:   { icon:' 🌙', bg:'#FEF3C7',            dim:true },
   };
   const byName = (a,b) => a.name < b.name ? -1 : 1;
   const rowHtml = s => {
     const m = meta[s.status];
-    return `<div style="display:flex;align-items:center;padding:8px 12px;border-radius:8px;background:${m.bg};border:1px solid var(--border);${m.dim?'opacity:0.55;':''}font-size:14px;font-weight:600;margin-bottom:5px">${s.name}<span style="font-size:11px;color:var(--sub);font-weight:400;margin-left:4px">${s.team}</span>${m.icon}</div>`;
+    // 추가근무: 행은 흰색 유지, 이름 옆 작은 초록 배지로만 표시
+    let trailing = m.icon;
+    if (s.status === 'extra') {
+      const er = s.extraReq || {};
+      trailing = ` <span style="background:#E6F7F1;color:#22A66B;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;margin-left:6px">⏰ ${er.startTime||''}~${er.endTime||''}</span>`;
+    }
+    return `<div style="display:flex;align-items:center;padding:8px 12px;border-radius:8px;background:${m.bg};border:1px solid var(--border);${m.dim?'opacity:0.55;':''}font-size:14px;font-weight:600;margin-bottom:5px">${s.name}<span style="font-size:11px;color:var(--sub);font-weight:400;margin-left:4px">${s.team}</span>${trailing}</div>`;
   };
 
   body.innerHTML = present.map(g => {
