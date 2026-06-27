@@ -305,8 +305,20 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 
   <div class="main">
 
-    <!-- ══ 페이지 1: 달력 현황 (홈) ══ -->
-    <div id="pg-cal" class="main-page active">
+    <!-- ══ 페이지 0: 출근명단 (홈) ══ -->
+    <div id="pg-roster" class="main-page active">
+      <div class="page-pad">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <div class="cal-nav" onclick="rosterChangeDay(-1)">‹</div>
+          <div id="rosterDateLabel" style="flex:1;text-align:center;font-size:14px;font-weight:800;line-height:1.4"></div>
+          <div class="cal-nav" onclick="rosterChangeDay(1)">›</div>
+        </div>
+        <div id="rosterBody"></div>
+      </div>
+    </div>
+
+    <!-- ══ 페이지 1: 달력 현황 ══ -->
+    <div id="pg-cal" class="main-page">
       <div class="cal-header">
         <div class="cal-nav" onclick="calChangeMonth(-1)">‹</div>
         <div class="cal-month-label" id="calMonthLabel"></div>
@@ -344,7 +356,10 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 
   <!-- 하단 탭 -->
   <nav class="bottom-nav">
-    <button class="bnav-item active" id="bnav-cal" onclick="switchPage('cal')">
+    <button class="bnav-item active" id="bnav-roster" onclick="switchPage('roster')">
+      <span class="bnav-icon">🏥</span>출근명단
+    </button>
+    <button class="bnav-item" id="bnav-cal" onclick="switchPage('cal')">
       <span class="bnav-icon">📅</span>근무 현황
     </button>
     <button class="bnav-item" id="bnav-history" onclick="switchPage('history')">
@@ -728,6 +743,7 @@ function subscribeRequests() {
     renderCalendar();
     loadHistory();
     loadUserLeave();
+    renderRoster();
   }, err => {
     console.error(err);
     allRequests = [
@@ -738,6 +754,7 @@ function subscribeRequests() {
     renderCalendar();
     loadHistory();
     loadUserLeave();
+    renderRoster();
   });
 }
 
@@ -806,11 +823,125 @@ window.goAdmin = () => {
 
 // ── 페이지 전환 ──
 window.switchPage = function(page) {
-  ['cal','history'].forEach(p => {
+  ['roster','cal','history'].forEach(p => {
     document.getElementById(`pg-${p}`).classList.toggle('active', p === page);
     document.getElementById(`bnav-${p}`).classList.toggle('active', p === page);
   });
+  if (page === 'roster') renderRoster();
 };
+
+// ── 출근명단 ──
+let rosterDate = today();
+
+// 해당 날짜 출근 팀 코드 (A/B/상근)
+function getTodayTeams(dateStr) {
+  const dow = new Date(dateStr + 'T00:00:00').getDay();
+  const teams = [];
+  if ([0,1,2,3].includes(dow)) teams.push('A');    // 일월화수
+  if ([3,4,5,6].includes(dow)) teams.push('B');    // 수목금토
+  if ([1,2,3,4,5].includes(dow)) teams.push('상근'); // 월화수목금
+  return teams;
+}
+
+// 팀명 기준 해당 날짜 출근 대상 여부 (Clean 제외)
+function rosterOnDuty(team, todayTeams) {
+  if (!team) return false;
+  if (team.toLowerCase().includes('clean')) return false;
+  if (team.includes('A') && todayTeams.includes('A')) return true;
+  if (team.includes('B') && todayTeams.includes('B')) return true;
+  if (team.includes('상근') && todayTeams.includes('상근')) return true;
+  return false;
+}
+
+// 출근명단 표시 그룹 분류
+function rosterGroupOf(team) {
+  team = team || '';
+  if (team === '상근팀') return '상근팀';
+  if (team.includes('진료')) return '진료';
+  if (team.includes('데스크')) return '데스크';
+  if (team.includes('상담')) return '상담';
+  if (team.includes('서포트') || team.toLowerCase().includes('support')) return '서포트';
+  return '기타';
+}
+
+window.rosterChangeDay = function(dir) {
+  const d = new Date(rosterDate + 'T00:00:00');
+  d.setDate(d.getDate() + dir);
+  rosterDate = d.toISOString().slice(0,10);
+  renderRoster();
+};
+
+function renderRoster() {
+  const body = document.getElementById('rosterBody');
+  if (!body) return;
+  const dateStr = rosterDate;
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['일','월','화','수','목','금','토'];
+  const todayTeams = getTodayTeams(dateStr);
+  const lbl = document.getElementById('rosterDateLabel');
+  if (lbl) lbl.textContent = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) · ${todayTeams.join('·')}팀 출근일`;
+
+  // 그날 승인된 추가근무자
+  const extraNames = new Set(allRequests
+    .filter(r => r.date === dateStr && r.type === 'extra' && r.status === 'approved')
+    .map(r => r.staffName));
+
+  // 직원별 그날 상태 판정 (leave/off/extra/work)
+  function statusOf(name, onDuty) {
+    const reqs = allRequests.filter(r => r.staffName === name && r.date === dateStr && r.status !== 'rejected');
+    if (reqs.some(r => r.type === 'leave')) return 'leave';
+    if (reqs.some(r => r.type === 'off')) return 'off';
+    if (!onDuty && reqs.some(r => r.type === 'extra')) return 'extra';
+    return 'work';
+  }
+
+  // 출근 대상: 스케줄상 출근 OR 추가근무 (Clean 제외)
+  const roster = allStaff.filter(s => {
+    const t = s.team || '';
+    if (t.toLowerCase().includes('clean')) return false;
+    return rosterOnDuty(t, todayTeams) || extraNames.has(s.name);
+  }).map(s => {
+    const onDuty = rosterOnDuty(s.team || '', todayTeams);
+    return { name: s.name, team: s.team || '', status: statusOf(s.name, onDuty), group: rosterGroupOf(s.team) };
+  });
+
+  const groupOrder = ['진료','데스크','상담','서포트','상근팀','기타'];
+  const present = groupOrder.filter(g => roster.some(s => s.group === g));
+  if (!present.length) {
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">이 날짜에 출근 대상이 없습니다</div>';
+    return;
+  }
+
+  const meta = {
+    work:  { icon:'',    bg:'#fff',               dim:false },
+    extra: { icon:' ⏰', bg:'var(--green-light)', dim:false },
+    leave: { icon:' 🌴', bg:'var(--primary-light)', dim:true },
+    off:   { icon:' 🌙', bg:'#FEF3C7',            dim:true },
+  };
+  const byName = (a,b) => a.name < b.name ? -1 : 1;
+  const rowHtml = s => {
+    const m = meta[s.status];
+    return `<div style="display:flex;align-items:center;padding:8px 12px;border-radius:8px;background:${m.bg};border:1px solid var(--border);${m.dim?'opacity:0.55;':''}font-size:14px;font-weight:600;margin-bottom:5px">${s.name}<span style="font-size:11px;color:var(--sub);font-weight:400;margin-left:4px">${s.team}</span>${m.icon}</div>`;
+  };
+
+  body.innerHTML = present.map(g => {
+    const members = roster.filter(s => s.group === g);
+    const attending = members.filter(s => s.status === 'work' || s.status === 'extra').sort(byName);
+    const absent = members.filter(s => s.status === 'leave' || s.status === 'off').sort(byName);
+    const divider = (attending.length && absent.length)
+      ? `<div style="height:1px;background:var(--border);margin:8px 0"></div>` : '';
+    return `
+      <div style="background:var(--surface);border-radius:14px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,0.06);margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:15px;font-weight:800">${g}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--sub)">출근 ${attending.length}/${members.length}명</div>
+        </div>
+        ${attending.map(rowHtml).join('')}
+        ${divider}
+        ${absent.map(rowHtml).join('')}
+      </div>`;
+  }).join('');
+}
 
 // ── 달력 ──
 window.calChangeMonth = dir => {
