@@ -892,15 +892,6 @@ function renderRoster() {
     .filter(r => r.date === dateStr && r.type === 'extra' && r.status === 'approved')
     .map(r => r.staffName));
 
-  // 직원별 그날 상태 판정 (leave/off/extra/work)
-  function statusOf(name, onDuty) {
-    const reqs = allRequests.filter(r => r.staffName === name && r.date === dateStr && r.status !== 'rejected');
-    if (reqs.some(r => r.type === 'leave')) return 'leave';
-    if (reqs.some(r => r.type === 'off')) return 'off';
-    if (!onDuty && reqs.some(r => r.type === 'extra')) return 'extra';
-    return 'work';
-  }
-
   // 출근 대상: 스케줄상 출근 OR 추가근무 (Clean 제외)
   const roster = allStaff.filter(s => {
     const t = s.team || '';
@@ -908,11 +899,18 @@ function renderRoster() {
     return rosterOnDuty(t, todayTeams) || extraNames.has(s.name);
   }).map(s => {
     const onDuty = rosterOnDuty(s.team || '', todayTeams);
-    const status = statusOf(s.name, onDuty);
-    const extraReq = status === 'extra'
-      ? allRequests.find(r => r.staffName === s.name && r.date === dateStr && r.type === 'extra' && r.status === 'approved')
-      : null;
-    return { name: s.name, team: s.team || '', status, group: rosterGroupOf(s.team), extraReq };
+    const reqs = allRequests.filter(r => r.staffName === s.name && r.date === dateStr && r.status !== 'rejected');
+    const allLeave  = reqs.find(r => r.type === 'leave' && (r.leaveSubType === 'all' || !r.leaveSubType)); // 종일연차
+    const hourLeave = reqs.find(r => r.type === 'leave' && r.leaveSubType === 'hour');                    // 시간연차
+    const offReq    = reqs.find(r => r.type === 'off');
+    const extraReq  = reqs.find(r => r.type === 'extra' && r.status === 'approved');
+    // 우선순위: 종일연차 > 오프 > 시간연차(출근) > 추가근무 > 출근
+    let status = 'work', leaveReq = null, exReq = null;
+    if (allLeave) status = 'leave';
+    else if (offReq) status = 'off';
+    else if (hourLeave) { status = 'hourleave'; leaveReq = hourLeave; }
+    else if (!onDuty && extraReq) { status = 'extra'; exReq = extraReq; }
+    return { name: s.name, team: s.team || '', status, group: rosterGroupOf(s.team), extraReq: exReq, leaveReq };
   });
 
   // 그룹 표시 순서: 상담 → 진료 → 데스크 → 서포트 → 상근팀 → 기타
@@ -934,27 +932,45 @@ function renderRoster() {
   };
 
   const meta = {
-    work:  { icon:'',    bg:'#fff',               dim:false },
-    extra: { icon:'',    bg:'#fff',               dim:false },
-    leave: { icon:' 🌴', bg:'var(--primary-light)', dim:true },
-    off:   { icon:' 🌙', bg:'#FEF3C7',            dim:true },
+    work:      { icon:'',    bg:'#fff',               dim:false },
+    extra:     { icon:'',    bg:'#fff',               dim:false },
+    hourleave: { icon:'',    bg:'#fff',               dim:false },
+    leave:     { icon:' 🌴', bg:'var(--primary-light)', dim:true },
+    off:       { icon:' 🌙', bg:'#FEF3C7',            dim:true },
   };
+
+  // 시간연차 배지: 조퇴/지각/자리비움 판별 (출근 09:00 / 퇴근 18:00)
+  const toMin = t => { const [h,m] = (t||'0:0').split(':').map(Number); return (h||0)*60 + (m||0); };
+  function hourLeaveBadge(r) {
+    const st = r.startTime || '', et = r.endTime || '';
+    const sm = toMin(st), em = toMin(et);
+    let text;
+    if (sm >= 9*60 && sm <= 10*60 && em < 18*60) text = `${et} 퇴근`;       // 조퇴
+    else if (sm > 9*60 && em >= 18*60) text = `${st} 출근`;                  // 지각
+    else text = `${st}~${et} 자리비움`;                                      // 중간
+    return ` <span style="background:#EBF0FB;color:#3B6FD4;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;margin-left:6px">🌴 ${text}</span>`;
+  }
+
   const byName = (a,b) => a.name < b.name ? -1 : 1;
   const rowHtml = s => {
     const m = meta[s.status];
-    // 추가근무: 행은 흰색 유지, 이름 옆 작은 초록 배지로만 표시
     let trailing = m.icon;
     if (s.status === 'extra') {
+      // 추가근무: 행은 흰색 유지, 이름 옆 작은 초록 배지
       const er = s.extraReq || {};
       trailing = ` <span style="background:#E6F7F1;color:#22A66B;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;margin-left:6px">⏰ ${er.startTime||''}~${er.endTime||''}</span>`;
+    } else if (s.status === 'hourleave') {
+      // 시간연차: 출근자로 표시 + 조퇴/지각/자리비움 배지
+      trailing = hourLeaveBadge(s.leaveReq || {});
     }
     return `<div style="display:flex;align-items:center;padding:8px 12px;border-radius:8px;background:${m.bg};border:1px solid var(--border);${m.dim?'opacity:0.55;':''}font-size:14px;font-weight:600;margin-bottom:5px">${s.name}<span style="font-size:11px;color:var(--sub);font-weight:400;margin-left:4px">${s.team}</span>${trailing}</div>`;
   };
 
   body.innerHTML = present.map(g => {
     const members = roster.filter(s => s.group === g);
-    const attending = members.filter(s => s.status === 'work' || s.status === 'extra').sort(byName);
-    const absent = members.filter(s => s.status === 'leave' || s.status === 'off').sort(byName);
+    // 시간연차는 상단(출근자)에 포함, 종일연차·오프만 하단
+    const attending = members.filter(s => ['work','extra','hourleave'].includes(s.status)).sort(byName);
+    const absent = members.filter(s => ['leave','off'].includes(s.status)).sort(byName);
     const divider = (attending.length && absent.length)
       ? `<div style="height:1px;background:var(--border);margin:8px 0"></div>` : '';
     const gc = groupColors[g] || groupColors['기타'];
