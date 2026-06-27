@@ -2456,7 +2456,10 @@ function staffRowHtml(s) {
       <td>${s.joinDate || '-'}</td>
       <td>${s.initLeave != null ? s.initLeave + '일' : '-'}</td>
       <td style="font-weight:800;color:${isLow ? 'var(--accent-red)' : 'var(--accent-green)'}">${fmtMinSigned(remainMin)}</td>
-      <td style="text-align:right"><button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button></td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-edit" onclick="editStaff('${s.id}')">✏️ 수정</button>
+        <button class="lh-action-btn lh-reject" onclick="deleteStaff('${s.id}')">🗑 삭제</button>
+      </td>
     </tr>
     <tr id="sedit-${s.id}" class="hidden">
       <td class="st-name">${s.name}</td>
@@ -2557,6 +2560,20 @@ window.saveStaff = async function(id) {
   renderStaffGrid();
   renderLeaveTable();
   showToast('✅ 저장되었습니다');
+};
+
+window.deleteStaff = async function(id) {
+  const staff = allStaff.find(s => s.id === id);
+  if (!staff) return;
+  if (!confirm(`정말 삭제하시겠습니까? ${staff.name}`)) return;
+  try {
+    await deleteDoc(doc(db, 'staff_list', id));
+  } catch(e) { console.error(e); }
+  const i = allStaff.findIndex(s => s.id === id);
+  if (i >= 0) allStaff.splice(i, 1);
+  renderStaffGrid();
+  renderLeaveTable();
+  showToast('🗑 직원이 삭제되었습니다');
 };
 
 // ═══════════════ 추가근무 합산 ═══════════════
