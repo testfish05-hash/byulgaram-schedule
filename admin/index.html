@@ -572,6 +572,11 @@
   }
   .lv-adj-field textarea { height: 60px; resize: vertical; }
   .lv-adj-field input:focus, .lv-adj-field select:focus, .lv-adj-field textarea:focus { outline: none; border-color: var(--primary); }
+  /* 관리자 직접추가 모달 유형 버튼 */
+  .aa-type-btn { padding: 9px 4px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 12px; font-weight: 700; cursor: pointer; color: var(--text-sub); }
+  .aa-type-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+  .aa-radio { flex: 1; padding: 8px; border: 1.5px solid var(--border); border-radius: 7px; background: var(--surface); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-sub); }
+  .aa-radio.sel { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
   /* 내역 테이블 포상/차감/정산 배지 */
   .lh-bonus { background: var(--accent-green-light); color: var(--accent-green); }
   .lh-deduct { background: var(--accent-red-light); color: var(--accent-red); }
@@ -697,6 +702,7 @@
         <div class="date-list-header">
           <input type="date" class="date-input" id="listDate" onchange="loadDateRequests()">
           <span style="font-size:13px;color:var(--text-sub)">날짜를 선택하세요</span>
+          <button class="btn-primary" style="width:auto;padding:9px 16px;margin-left:auto" onclick="openAdminAdd()">＋ 관리자 직접 추가</button>
         </div>
         <div class="two-col">
           <div class="col-card">
@@ -892,6 +898,68 @@
         <div class="tl-modal-footer">
           <button class="btn-edit" onclick="closeSalaryModalForce()">취소</button>
           <button class="btn-primary" style="width:auto;padding:9px 18px;background:var(--accent-red)" onclick="submitSalaryDeduct()">급여차감 확인</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 관리자 직접 신청 추가 모달 -->
+    <div id="adminAddModal" class="tl-modal-overlay hidden" onclick="closeAdminAdd(event)">
+      <div class="tl-modal">
+        <div class="tl-modal-header">
+          <div class="tl-modal-title">관리자 직접 신청 추가</div>
+          <button class="tl-modal-x" onclick="closeAdminAddForce()">✕</button>
+        </div>
+        <div class="tl-modal-body">
+          <div class="lv-adj-field">
+            <label>날짜</label>
+            <input type="date" id="aaDate">
+          </div>
+          <div class="lv-adj-field">
+            <label>직원</label>
+            <select id="aaStaff"><option value="">직원 선택...</option></select>
+          </div>
+          <div class="lv-adj-field">
+            <label>신청 유형</label>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+              <button type="button" class="aa-type-btn" data-type="leave" onclick="setAdminAddType('leave')">🌴 연차</button>
+              <button type="button" class="aa-type-btn" data-type="extra" onclick="setAdminAddType('extra')">⏰ 추가</button>
+              <button type="button" class="aa-type-btn" data-type="off" onclick="setAdminAddType('off')">🌙 오프</button>
+              <button type="button" class="aa-type-btn" data-type="swap" onclick="setAdminAddType('swap')">🔄 교체</button>
+            </div>
+          </div>
+          <!-- 연차 옵션 -->
+          <div class="lv-adj-field aa-pane" id="aa-leave">
+            <label>연차 유형</label>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <button type="button" id="aaLeaveAll" class="aa-radio sel" onclick="setAaLeaveSub('all')">종일</button>
+              <button type="button" id="aaLeaveHour" class="aa-radio" onclick="setAaLeaveSub('hour')">시간연차</button>
+            </div>
+            <div id="aaLeaveTimeRow" style="display:none">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="time" id="aaLeaveStart" style="flex:1"><span>~</span><input type="time" id="aaLeaveEnd" style="flex:1">
+              </div>
+            </div>
+          </div>
+          <!-- 추가근무 옵션 -->
+          <div class="lv-adj-field aa-pane" id="aa-extra" style="display:none">
+            <label>시간 (30분 단위)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <select id="aaExtraStart" style="flex:1"></select><span>~</span><select id="aaExtraEnd" style="flex:1"></select>
+            </div>
+          </div>
+          <!-- 근무교체 옵션 -->
+          <div class="lv-adj-field aa-pane" id="aa-swap" style="display:none">
+            <label>교체 상대</label>
+            <select id="aaSwapTarget"><option value="">교체 상대...</option></select>
+          </div>
+          <div class="lv-adj-field">
+            <label>메모</label>
+            <textarea id="aaMemo" placeholder="메모 (선택)"></textarea>
+          </div>
+        </div>
+        <div class="tl-modal-footer">
+          <button class="btn-edit" onclick="closeAdminAddForce()">취소</button>
+          <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="submitAdminAdd()">저장</button>
         </div>
       </div>
     </div>
@@ -1324,16 +1392,126 @@ function renderRequestCol(colId, reqs) {
     }
 
     const typeIcon = r.type === 'leave' ? '🌴' : r.type === 'extra' ? '⏰' : r.type === 'off' ? '🌙' : '🔄';
+    const adminBadge = r.adminAdded
+      ? `<span style="font-size:10px;font-weight:700;color:var(--primary);background:var(--primary-light);padding:1px 6px;border-radius:10px;margin-left:5px">관리자추가</span>` : '';
+    const delBtn = `<button onclick="deleteRequest('${r.id}')" title="삭제" style="background:#FEE2E2;color:#DC2626;border:1px solid #DC2626;border-radius:6px;width:30px;height:30px;cursor:pointer;flex-shrink:0;font-size:14px">🗑️</button>`;
     return `
       <div class="request-row">
         <div class="req-info">
-          <div class="req-name">${typeIcon} ${r.staffName} <span style="font-size:11px;color:var(--text-sub);font-weight:400">${r.staffTeam}</span></div>
+          <div class="req-name">${typeIcon} ${r.staffName} <span style="font-size:11px;color:var(--text-sub);font-weight:400">${r.staffTeam}</span>${adminBadge}</div>
           <div class="req-detail">${detail}${r.memo ? ' · ' + r.memo : ''}</div>
         </div>
         ${statusHtml}
+        ${delBtn}
       </div>`;
   }).join('');
 }
+
+// 신청 삭제 (관리자)
+window.deleteRequest = async function(id) {
+  if (!confirm('삭제하시겠습니까?')) return;
+  try { await deleteDoc(doc(db, 'schedule_requests', id)); } catch(e) { console.error(e); }
+  const i = allRequests.findIndex(r => r.id === id);
+  if (i >= 0) allRequests.splice(i, 1);
+  loadDateRequests();
+  renderCalendar();
+  updateStats();
+  renderLeaveTable();
+  showToast('🗑 삭제되었습니다');
+};
+
+// ─── 관리자 직접 신청 추가 ───
+let aaType = 'leave', aaLeaveSub = 'all';
+
+function aaTimeOptions() {
+  let o = '<option value="">선택</option>';
+  for (let m = 9*60; m <= 21*60; m += 30) {
+    o += `<option>${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}</option>`;
+  }
+  return o;
+}
+
+window.openAdminAdd = function() {
+  const sorted = allStaff.slice().sort((a,b) => ((a.team||'')+a.name) < ((b.team||'')+b.name) ? -1 : 1);
+  document.getElementById('aaStaff').innerHTML = '<option value="">직원 선택...</option>' +
+    sorted.map(s => `<option value="${s.id}">[${s.team||'-'}] ${s.name}</option>`).join('');
+  document.getElementById('aaSwapTarget').innerHTML = '<option value="">교체 상대...</option>' +
+    sorted.map(s => `<option value="${s.name}">[${s.team||'-'}] ${s.name}</option>`).join('');
+  document.getElementById('aaExtraStart').innerHTML = aaTimeOptions();
+  document.getElementById('aaExtraEnd').innerHTML = aaTimeOptions();
+  document.getElementById('aaDate').value = document.getElementById('listDate').value || new Date().toISOString().slice(0,10);
+  document.getElementById('aaMemo').value = '';
+  document.getElementById('aaLeaveStart').value = '';
+  document.getElementById('aaLeaveEnd').value = '';
+  setAdminAddType('leave');
+  setAaLeaveSub('all');
+  document.getElementById('adminAddModal').classList.remove('hidden');
+};
+
+window.setAdminAddType = function(t) {
+  aaType = t;
+  document.querySelectorAll('.aa-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t));
+  document.getElementById('aa-leave').style.display = t === 'leave' ? '' : 'none';
+  document.getElementById('aa-extra').style.display = t === 'extra' ? '' : 'none';
+  document.getElementById('aa-swap').style.display = t === 'swap' ? '' : 'none';
+};
+
+window.setAaLeaveSub = function(s) {
+  aaLeaveSub = s;
+  document.getElementById('aaLeaveAll').classList.toggle('sel', s === 'all');
+  document.getElementById('aaLeaveHour').classList.toggle('sel', s === 'hour');
+  document.getElementById('aaLeaveTimeRow').style.display = s === 'hour' ? '' : 'none';
+};
+
+window.closeAdminAdd = function(e) {
+  if (e.target === document.getElementById('adminAddModal')) closeAdminAddForce();
+};
+window.closeAdminAddForce = function() {
+  document.getElementById('adminAddModal').classList.add('hidden');
+};
+
+window.submitAdminAdd = async function() {
+  const staff = allStaff.find(s => s.id === document.getElementById('aaStaff').value);
+  if (!staff) { showToast('직원을 선택하세요'); return; }
+  const date = document.getElementById('aaDate').value;
+  if (!date) { showToast('날짜를 선택하세요'); return; }
+  const memo = document.getElementById('aaMemo').value.trim();
+
+  // 관리자 추가는 즉시 승인 + 제한 체크 없음
+  const data = {
+    type: aaType, staffName: staff.name, staffTeam: staff.team || '',
+    date, status: 'approved', adminAdded: true, memo, createdAt: serverTimestamp()
+  };
+
+  if (aaType === 'leave') {
+    data.leaveSubType = aaLeaveSub;
+    if (aaLeaveSub === 'hour') {
+      const s = document.getElementById('aaLeaveStart').value, e = document.getElementById('aaLeaveEnd').value;
+      if (!s || !e) { showToast('시간을 입력하세요'); return; }
+      data.startTime = s; data.endTime = e; data.leaveAmount = 0.5;
+    } else { data.leaveAmount = 1; }
+  } else if (aaType === 'extra') {
+    const s = document.getElementById('aaExtraStart').value, e = document.getElementById('aaExtraEnd').value;
+    if (!s || !e) { showToast('시간을 선택하세요'); return; }
+    data.startTime = s; data.endTime = e;
+  } else if (aaType === 'swap') {
+    const target = document.getElementById('aaSwapTarget').value;
+    if (!target) { showToast('교체 상대를 선택하세요'); return; }
+    data.swapTarget = target;
+  }
+
+  try {
+    const ref = await addDoc(collection(db, 'schedule_requests'), data);
+    data.id = ref.id;
+  } catch(e) { data.id = 'aa' + Date.now(); }
+  allRequests.unshift({ ...data, createdAt: null });
+  closeAdminAddForce();
+  loadDateRequests();
+  renderCalendar();
+  updateStats();
+  renderLeaveTable();
+  showToast('✅ 신청이 추가되었습니다');
+};
 
 // ─── 승인/반려 ───
 window.updateStatus = async function(reqId, status) {
