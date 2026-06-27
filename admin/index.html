@@ -628,9 +628,6 @@
     <div class="sidebar-item" onclick="showPage('teamlimit')" id="nav-teamlimit">
       <span>🔢</span><span>팀 인원 제한</span>
     </div>
-    <div class="sidebar-item" onclick="showPage('notice')" id="nav-notice">
-      <span>📢</span><span>공지사항</span>
-    </div>
     <div class="sidebar-item" onclick="showPage('overtime')" id="nav-overtime">
       <span>⏰</span><span>추가근무 합산</span>
     </div>
@@ -926,28 +923,6 @@
       </div>
     </div>
 
-    <!-- 공지사항 페이지 -->
-    <div id="page-notice" class="hidden">
-      <div class="page-header">
-        <div>
-          <div class="page-title">📢 공지사항</div>
-          <div class="page-sub">월별 공지를 등록하고 완료 체크·댓글을 남기세요</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <input type="month" id="noticeMonth" class="form-input" style="width:180px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px" onchange="onNoticeMonthChange()">
-      </div>
-      <div class="col-card" style="padding:16px;margin-bottom:18px">
-        <div style="font-size:14px;font-weight:800;margin-bottom:10px">새 공지 추가</div>
-        <input class="staff-edit-input" id="newNoticeTitle" placeholder="제목" style="width:100%;margin-bottom:8px" onkeydown="if(event.key==='Enter') document.getElementById('newNoticeText').focus()">
-        <textarea class="staff-edit-input" id="newNoticeText" placeholder="내용" style="width:100%;height:60px;resize:vertical"></textarea>
-        <div style="margin-top:10px;text-align:right">
-          <button class="btn-primary" style="width:auto;padding:9px 18px" onclick="addNotice()">+ 공지 추가</button>
-        </div>
-      </div>
-      <div id="noticeList" style="display:flex;flex-direction:column;gap:12px"></div>
-    </div>
-
     <!-- 추가근무 합산 페이지 -->
     <div id="page-overtime" class="hidden">
       <div class="page-header">
@@ -1002,9 +977,7 @@ let allStaff = [];
 let teamLimits = {}; // (구) 팀별 제한 - team_list 마이그레이션 호환용으로만 유지
 let teamList = [];   // [{ id, name, order }] - team_list 컬렉션
 let dateLimits = {}; // { 'YYYY-MM-DD': { '팀명': 연차제한수 } } - date_limits 컬렉션
-let notices = [];    // [{ id, month, text, done, ts, comments:[] }] - notices 컬렉션
-let noticeMonth = ''; // 선택된 공지 월 (YYYY-MM)
-let unsubRequests = null, unsubStaff = null, unsubNotices = null; // 실시간 구독 해제 함수
+let unsubRequests = null, unsubStaff = null; // 실시간 구독 해제 함수
 let calYear, calMonth;
 let tlYear, tlMonth, tlModalDate = '';
 let editingStaff = {};
@@ -1043,8 +1016,8 @@ window.doAdminLogin = function() {
 
 window.doLogout = function() {
   // 전체 실시간 구독 해제
-  [unsubRequests, unsubStaff, unsubNotices].forEach(u => { if (u) u(); });
-  unsubRequests = unsubStaff = unsubNotices = null;
+  [unsubRequests, unsubStaff].forEach(u => { if (u) u(); });
+  unsubRequests = unsubStaff = null;
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('pwInput').value = '';
@@ -1055,14 +1028,11 @@ async function initAdmin() {
   await Promise.all([loadTeamLimits(), loadDateLimits()]);
   await loadTeamList();
 
-  // 월 기본값 등 UI 초기화 (구독 콜백이 참조하므로 먼저 설정)
-  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  noticeMonth = ym;
-  document.getElementById('noticeMonth').value = ym;
+  // UI 초기화 (구독 콜백이 참조하므로 먼저 설정)
   document.getElementById('listDate').value = new Date().toISOString().slice(0,10);
   populateOtMonths();
 
-  // 실시간 구독 시작 (schedule_requests / staff_list / notices)
+  // 실시간 구독 시작 (schedule_requests / staff_list)
   subscribeAdmin();
 }
 
@@ -1087,20 +1057,6 @@ function subscribeAdmin() {
     renderStaffGrid();
     renderLeaveTable();
     renderCalendar();
-  }, err => console.error(err));
-
-  // notices (+ 댓글 서브컬렉션)
-  if (unsubNotices) unsubNotices();
-  unsubNotices = onSnapshot(collection(db, 'notices'), async snap => {
-    const arr = snap.docs.map(d => ({ id: d.id, ...d.data(), comments: [] }));
-    for (const n of arr) {
-      try {
-        const cs = await getDocs(collection(db, 'notices', n.id, 'comments'));
-        n.comments = cs.docs.map(c => ({ id: c.id, ...c.data() }));
-      } catch(e) { n.comments = []; }
-    }
-    notices = arr;
-    renderNoticePage();
   }, err => console.error(err));
 }
 
@@ -1187,7 +1143,7 @@ function refreshStaffTeamDropdowns() {
 
 // ─── 페이지 전환 ───
 window.showPage = function(page) {
-  ['requests','leave','staff','teamlimit','teams','notice','overtime'].forEach(p => {
+  ['requests','leave','staff','teamlimit','teams','overtime'].forEach(p => {
     document.getElementById(`page-${p}`)?.classList.add('hidden');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
@@ -1195,7 +1151,6 @@ window.showPage = function(page) {
   document.getElementById(`nav-${page}`)?.classList.add('active');
   if (page === 'teamlimit') renderTeamLimitCalendar();
   if (page === 'teams') renderTeamsPage();
-  if (page === 'notice') renderNoticePage();
   if (page === 'overtime') renderOvertimePage();
 };
 
@@ -2594,119 +2549,6 @@ window.saveStaff = async function(id) {
   renderStaffGrid();
   renderLeaveTable();
   showToast('✅ 저장되었습니다');
-};
-
-// ═══════════════ 공지사항 ═══════════════
-async function loadNotices() {
-  try {
-    const snap = await getDocs(collection(db, 'notices'));
-    notices = snap.docs.map(d => ({ id: d.id, ...d.data(), comments: [] }));
-    // 각 공지의 댓글 로드
-    for (const n of notices) {
-      try {
-        const cs = await getDocs(collection(db, 'notices', n.id, 'comments'));
-        n.comments = cs.docs.map(c => ({ id: c.id, ...c.data() }));
-      } catch(e) { n.comments = []; }
-    }
-  } catch(e) {
-    notices = [];
-  }
-}
-
-window.onNoticeMonthChange = function() {
-  noticeMonth = document.getElementById('noticeMonth').value;
-  renderNoticePage();
-};
-
-function renderNoticePage() {
-  if (!noticeMonth) {
-    noticeMonth = document.getElementById('noticeMonth').value || new Date().toISOString().slice(0,7);
-    document.getElementById('noticeMonth').value = noticeMonth;
-  }
-  const list = notices.filter(n => n.month === noticeMonth).sort((a,b) => (a.ts||0) - (b.ts||0));
-  const box = document.getElementById('noticeList');
-  if (!list.length) {
-    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-sub);font-size:13px">이 달의 공지가 없습니다</div>';
-    return;
-  }
-  box.innerHTML = list.map(n => {
-    const comments = (n.comments || []).slice().sort((a,b) => (a.ts||0) - (b.ts||0));
-    const cHtml = comments.length
-      ? comments.map(c => `<div style="font-size:12px;padding:6px 0;border-top:1px solid var(--border)"><b style="color:var(--primary)">${(c.author||'익명')}</b> <span style="color:var(--text)">${(c.text||'').replace(/</g,'&lt;')}</span></div>`).join('')
-      : '<div style="font-size:12px;color:var(--text-sub);padding:6px 0">댓글 없음</div>';
-    return `
-      <div class="col-card" style="padding:14px 16px">
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <input type="checkbox" ${n.done ? 'checked' : ''} onchange="toggleNoticeDone('${n.id}', this.checked)" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;margin-top:2px">
-          <div style="flex:1;min-width:0;${n.done ? 'text-decoration:line-through;color:var(--text-sub)' : ''}">
-            ${n.title ? `<div style="font-size:14px;font-weight:800">${(n.title||'').replace(/</g,'&lt;')}</div>` : ''}
-            ${n.text ? `<div style="font-size:13px;color:var(--text-sub);margin-top:2px;white-space:pre-wrap">${(n.text||'').replace(/</g,'&lt;')}</div>` : ''}
-          </div>
-          <button class="lh-action-btn lh-reject" onclick="deleteNotice('${n.id}')">🗑 삭제</button>
-        </div>
-        <div style="margin-top:10px">
-          <div style="font-size:11px;font-weight:700;color:var(--text-sub);margin-bottom:2px">💬 메모/댓글 (${comments.length})</div>
-          ${cHtml}
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <input class="staff-edit-input" id="cmt-input-${n.id}" placeholder="댓글 입력" style="flex:1" onkeydown="if(event.key==='Enter') addComment('${n.id}')">
-            <button class="btn-edit" onclick="addComment('${n.id}')">등록</button>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-window.addNotice = async function() {
-  const title = document.getElementById('newNoticeTitle').value.trim();
-  const text = document.getElementById('newNoticeText').value.trim();
-  if (!title && !text) { showToast('제목 또는 내용을 입력하세요'); return; }
-  const n = { month: noticeMonth, title, text, done: false, ts: Date.now(), createdAt: serverTimestamp() };
-  try {
-    const ref = await addDoc(collection(db, 'notices'), n);
-    n.id = ref.id;
-  } catch(e) {
-    n.id = 'n' + Date.now();
-  }
-  n.comments = [];
-  notices.push(n);
-  document.getElementById('newNoticeTitle').value = '';
-  document.getElementById('newNoticeText').value = '';
-  renderNoticePage();
-  showToast('📢 공지가 추가되었습니다');
-};
-
-window.toggleNoticeDone = async function(id, done) {
-  const n = notices.find(x => x.id === id);
-  if (!n) return;
-  n.done = done;
-  try { await updateDoc(doc(db, 'notices', id), { done }); } catch(e) {}
-  renderNoticePage();
-};
-
-window.deleteNotice = async function(id) {
-  if (!confirm('이 공지를 삭제하시겠습니까?')) return;
-  try { await deleteDoc(doc(db, 'notices', id)); } catch(e) {}
-  const i = notices.findIndex(x => x.id === id);
-  if (i >= 0) notices.splice(i, 1);
-  renderNoticePage();
-  showToast('🗑 공지가 삭제되었습니다');
-};
-
-window.addComment = async function(noticeId) {
-  const input = document.getElementById(`cmt-input-${noticeId}`);
-  const text = input.value.trim();
-  if (!text) return;
-  const c = { author: '관리자', text, ts: Date.now(), createdAt: serverTimestamp() };
-  try {
-    const ref = await addDoc(collection(db, 'notices', noticeId, 'comments'), c);
-    c.id = ref.id;
-  } catch(e) {
-    c.id = 'c' + Date.now();
-  }
-  const n = notices.find(x => x.id === noticeId);
-  if (n) { n.comments = n.comments || []; n.comments.push(c); }
-  input.value = '';
-  renderNoticePage();
 };
 
 // ═══════════════ 추가근무 합산 ═══════════════
