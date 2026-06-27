@@ -1189,14 +1189,34 @@ function loadHistory() {
   const list = document.getElementById('historyList');
   // onSnapshot으로 구독중인 allRequests에서 내 신청만 필터 (별도 query 불필요)
   const myReqs = allRequests
-    .filter(r => r.staffName === currentUser?.name && !['bonus','deduct','settlement','salary_deduct'].includes(r.type))
-    .sort((a,b) => (b.date||'') > (a.date||'') ? 1 : -1);
+    .filter(r => r.staffName === currentUser?.name && !['bonus','deduct','settlement','salary_deduct'].includes(r.type));
   if (!myReqs.length) {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">신청 내역이 없습니다</div>';
     return;
   }
   list.innerHTML = '';
-  myReqs.forEach(r => list.appendChild(renderHistItem(r)));
+
+  // 카테고리별 섹션 (연차 / 추가근무 / 근무교체), 각 섹션 날짜 내림차순
+  const sections = [
+    { type:'leave', icon:'🌴', label:'연차' },
+    { type:'extra', icon:'⏰', label:'추가근무' },
+    { type:'swap',  icon:'🔄', label:'근무교체' },
+  ];
+  let first = true;
+  sections.forEach(({ type, icon, label }) => {
+    const reqs = myReqs
+      .filter(r => r.type === type)
+      .sort((a,b) => (b.date||'') > (a.date||'') ? 1 : -1);
+    if (!reqs.length) return; // 신청 없는 카테고리는 섹션 숨김
+
+    const header = document.createElement('div');
+    header.className = 'section-title';
+    header.style.cssText = `margin:${first ? '4px' : '20px'} 0 10px`;
+    header.textContent = `${icon} ${label} ${reqs.length}건`;
+    list.appendChild(header);
+    reqs.forEach(r => list.appendChild(renderHistItem(r)));
+    first = false;
+  });
 }
 
 function renderHistItem(r) {
