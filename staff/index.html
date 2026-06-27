@@ -831,7 +831,14 @@ window.switchPage = function(page) {
 };
 
 // ── 출근명단 ──
-let rosterDate = today();
+// 로컬 기준 YYYY-MM-DD (toISOString UTC 변환 방지)
+const ymdLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+let rosterDate = ymdLocal(NOW);
+
+function setRosterDate(dateStr) {
+  rosterDate = dateStr;
+  renderRoster();
+}
 
 // 해당 날짜 출근 팀 코드 (A/B/상근)
 function getTodayTeams(dateStr) {
@@ -867,8 +874,7 @@ function rosterGroupOf(team) {
 window.rosterChangeDay = function(dir) {
   const d = new Date(rosterDate + 'T00:00:00');
   d.setDate(d.getDate() + dir);
-  rosterDate = d.toISOString().slice(0,10);
-  renderRoster();
+  setRosterDate(ymdLocal(d)); // 로컬 기준으로 날짜 문자열 생성 (다음날 버그 수정)
 };
 
 function renderRoster() {
@@ -905,12 +911,23 @@ function renderRoster() {
     return { name: s.name, team: s.team || '', status: statusOf(s.name, onDuty), group: rosterGroupOf(s.team) };
   });
 
-  const groupOrder = ['진료','데스크','상담','서포트','상근팀','기타'];
+  // 그룹 표시 순서: 상담 → 진료 → 데스크 → 서포트 → 상근팀 → 기타
+  const groupOrder = ['상담','진료','데스크','서포트','상근팀','기타'];
   const present = groupOrder.filter(g => roster.some(s => s.group === g));
   if (!present.length) {
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">이 날짜에 출근 대상이 없습니다</div>';
     return;
   }
+
+  // 그룹별 헤더 색상
+  const groupColors = {
+    '상담':   { color:'#7C4DFF', bg:'#EDE7FF' },
+    '진료':   { color:'#3B6FD4', bg:'#EBF0FB' },
+    '데스크': { color:'#22A66B', bg:'#E6F7F1' },
+    '서포트': { color:'#E87722', bg:'#FEF1E6' },
+    '상근팀': { color:'#E53E3E', bg:'#FEE2E2' },
+    '기타':   { color:'#6B7280', bg:'#F3F4F6' },
+  };
 
   const meta = {
     work:  { icon:'',    bg:'#fff',               dim:false },
@@ -930,11 +947,12 @@ function renderRoster() {
     const absent = members.filter(s => s.status === 'leave' || s.status === 'off').sort(byName);
     const divider = (attending.length && absent.length)
       ? `<div style="height:1px;background:var(--border);margin:8px 0"></div>` : '';
+    const gc = groupColors[g] || groupColors['기타'];
     return `
       <div style="background:var(--surface);border-radius:14px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,0.06);margin-bottom:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;background:${gc.bg};color:${gc.color};border-radius:8px;padding:8px 12px">
           <div style="font-size:15px;font-weight:800">${g}</div>
-          <div style="font-size:12px;font-weight:700;color:var(--sub)">출근 ${attending.length}/${members.length}명</div>
+          <div style="font-size:12px;font-weight:700">출근 ${attending.length}/${members.length}명</div>
         </div>
         ${attending.map(rowHtml).join('')}
         ${divider}
