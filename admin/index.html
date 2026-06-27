@@ -201,6 +201,7 @@
   .chip-leave { background: var(--primary-light); color: var(--primary); }
   .chip-extra { background: var(--accent-green-light); color: var(--accent-green); }
   .chip-swap { background: var(--accent-purple-light); color: var(--accent-purple); }
+  .chip-off { background: #FEF3C7; color: #D97706; }
   /* 상태별: 검토중=빨강 / 반려=회색 취소선 */
   .chip-pending { background: #FECACA !important; color: #B91C1C !important; }
   .chip-rejected { background: #E5E7EB !important; color: #9CA3AF !important; text-decoration: line-through; }
@@ -1211,8 +1212,8 @@ function renderCalendar() {
     const cls = ['cal-day', isSun?'sun':'', isSat?'sat':'', isToday?'today':''].filter(Boolean).join(' ');
 
     function makeChip(r) {
-      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : 'chip-swap';
-      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : '🔄';
+      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : r.type==='off' ? 'chip-off' : 'chip-swap';
+      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : r.type==='off' ? '🌙' : '🔄';
       // pending=빨강, approved=유형색, rejected=회색 취소선
       const c = r.status === 'approved' ? `cal-chip ${typeClass}`
         : r.status === 'rejected' ? 'cal-chip chip-rejected'
@@ -1220,15 +1221,19 @@ function renderCalendar() {
       return `<div class="${c}">${icon}${r.staffName}(${r.staffTeam})</div>`;
     }
 
-    // 좌측: 연차(상단) → 가로 구분선 → 교체(하단) / 우측: 추가근무
+    // 좌측: 연차 → 오프 → 교체 (각 그룹 사이 가로 구분선) / 우측: 추가근무
     const leaveReqs = dayReqs.filter(r => r.type === 'leave');
+    const offReqs   = dayReqs.filter(r => r.type === 'off');
     const swapReqs  = dayReqs.filter(r => r.type === 'swap');
     const extraReqs = dayReqs.filter(r => r.type === 'extra');
-    const leaveSwapDivider = (leaveReqs.length && swapReqs.length)
-      ? `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>` : '';
-    const leftChips = leaveReqs.map(makeChip).join('') + leaveSwapDivider + swapReqs.map(makeChip).join('');
+    const hDivider = `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>`;
+    const leftChips = [
+      leaveReqs.map(makeChip).join(''),
+      offReqs.map(makeChip).join(''),
+      swapReqs.map(makeChip).join(''),
+    ].filter(s => s.length > 0).join(hDivider);
     const rightChips = extraReqs.map(makeChip).join('');
-    const colsDivider = ((leaveReqs.length || swapReqs.length) && extraReqs.length)
+    const colsDivider = ((leaveReqs.length || offReqs.length || swapReqs.length) && extraReqs.length)
       ? `<div style="width:1px;background:#E2E8F0;flex-shrink:0;margin-top:2px"></div>` : '';
 
     // 날짜 상단 팀별(풀) 카운트 배지 (연차 기준)
@@ -1275,10 +1280,11 @@ window.loadDateRequests = function() {
 
   const dayReqs = allRequests.filter(r => r.date === date);
   const leaves = dayReqs.filter(r => r.type === 'leave');
+  const offs = dayReqs.filter(r => r.type === 'off');
   const extras = dayReqs.filter(r => r.type === 'extra');
   const swaps = dayReqs.filter(r => r.type === 'swap');
 
-  renderRequestCol('leaveCol', [...leaves, ...swaps]);
+  renderRequestCol('leaveCol', [...leaves, ...offs, ...swaps]);
   renderRequestCol('extraCol', extras);
 };
 
@@ -1290,11 +1296,13 @@ function renderRequestCol(colId, reqs) {
       ? (r.leaveSubType === 'all' ? '종일' : `${r.startTime}~${r.endTime}`)
       : r.type === 'extra'
       ? `${r.startTime}~${r.endTime}`
+      : r.type === 'off'
+      ? '오프'
       : `↔ ${r.swapTarget}`;
 
     let statusHtml;
-    if (r.type === 'swap') {
-      // 근무교체는 자동승인 — 승인/반려 버튼 없이 배지만 표시
+    if (r.type === 'swap' || r.type === 'off') {
+      // 근무교체·오프는 자동승인 — 승인/반려 버튼 없이 배지만 표시
       statusHtml = `<span class="status-badge approved-badge">⚡ 자동승인</span>`;
     } else if (r.status === 'pending') {
       statusHtml = `<div class="req-actions">
@@ -1315,7 +1323,7 @@ function renderRequestCol(colId, reqs) {
         </div>`;
     }
 
-    const typeIcon = r.type === 'leave' ? '🌴' : r.type === 'extra' ? '⏰' : '🔄';
+    const typeIcon = r.type === 'leave' ? '🌴' : r.type === 'extra' ? '⏰' : r.type === 'off' ? '🌙' : '🔄';
     return `
       <div class="request-row">
         <div class="req-info">

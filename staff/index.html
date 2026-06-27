@@ -135,6 +135,7 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .chip-leave { background: var(--primary-light); color: var(--primary); }
 .chip-extra { background: var(--green-light); color: var(--green); }
 .chip-swap  { background: var(--purple-light); color: var(--purple); }
+.chip-off   { background: #FEF3C7; color: #D97706; }
 /* 승인 상태별 */
 .chip-pending { background: #FECACA !important; color: #B91C1C !important; }
 .chip-approved { /* 유형 색 그대로 유지 */ }
@@ -157,6 +158,7 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .badge-leave { background: var(--primary-light); color: var(--primary); }
 .badge-extra { background: var(--green-light); color: var(--green); }
 .badge-swap  { background: var(--purple-light); color: var(--purple); }
+.badge-off   { background: #FEF3C7; color: #D97706; }
 .h-info { flex: 1; }
 .h-date { font-size: 13px; font-weight: 700; }
 .h-detail { font-size: 11px; color: var(--sub); margin-top: 2px; }
@@ -204,7 +206,7 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .day-empty { text-align: center; padding: 28px 0; color: var(--sub); font-size: 13px; }
 
 /* 신청 폼 */
-.req-type-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.req-type-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
 .req-type-btn { padding: 12px 6px; border: 2px solid var(--border); border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface); }
 .req-type-btn .rt-icon { font-size: 20px; margin-bottom: 3px; }
 .req-type-btn .rt-lbl { font-size: 11px; font-weight: 700; color: var(--sub); }
@@ -214,6 +216,8 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .req-type-btn.active-leave .rt-lbl { color: var(--primary); }
 .req-type-btn.active-swap  { border-color: var(--purple); background: var(--purple-light); }
 .req-type-btn.active-swap  .rt-lbl { color: var(--purple); }
+.req-type-btn.active-off   { border-color: #F59E0B; background: #FEF3C7; }
+.req-type-btn.active-off   .rt-lbl { color: #D97706; }
 .form-pane { display: none; }
 .form-pane.active { display: block; }
 .fg { margin-bottom: 13px; }
@@ -235,6 +239,7 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .btn-extra-c { background: var(--green); color: #fff; }
 .btn-leave-c { background: var(--primary); color: #fff; }
 .btn-swap-c  { background: var(--purple); color: #fff; }
+.btn-off-c   { background: #F59E0B; color: #fff; }
 
 /* 토스트 */
 .toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%); background: var(--dark); color: #fff; padding: 11px 20px; border-radius: 30px; font-size: 13px; font-weight: 600; z-index: 9999; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
@@ -385,6 +390,9 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
           <div class="req-type-btn" id="rt-leave" onclick="setModalType('leave')">
             <div class="rt-icon">🌴</div><div class="rt-lbl">연차</div>
           </div>
+          <div class="req-type-btn" id="rt-off" onclick="setModalType('off')">
+            <div class="rt-icon">🌙</div><div class="rt-lbl">오프</div>
+          </div>
           <div class="req-type-btn" id="rt-swap" onclick="setModalType('swap')">
             <div class="rt-icon">🔄</div><div class="rt-lbl">근무교체</div>
           </div>
@@ -437,6 +445,19 @@ body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
             <textarea class="fta" id="fpLeaveMemo" placeholder="연차 사유를 입력하세요"></textarea>
           </div>
           <button class="btn-submit btn-leave-c" onclick="submitModal('leave')">연차 신청</button>
+        </div>
+
+        <!-- 오프 폼 -->
+        <div class="form-pane" id="fp-off">
+          <div class="fg">
+            <label class="fl">날짜</label>
+            <div style="padding:10px 13px;background:var(--bg);border-radius:9px;font-size:14px;font-weight:700;color:var(--primary)" id="fpOffDateDisplay"></div>
+          </div>
+          <div class="fg">
+            <label class="fl">메모</label>
+            <textarea class="fta" id="fpOffMemo" placeholder="오프 사유를 입력하세요"></textarea>
+          </div>
+          <button class="btn-submit btn-off-c" onclick="submitModal('off')">오프 신청</button>
         </div>
 
         <!-- 근무교체 폼 -->
@@ -827,16 +848,15 @@ function renderCalendar() {
       isPast?'cal-past':'',
     ].filter(Boolean).join(' ');
 
-    // 좌측: 연차 + 근무교체 / 우측: 추가근무
-    const leftReqs  = dayReqs.filter(r => r.type === 'leave' || r.type === 'swap');
+    // 좌측: 연차 + 오프 + 근무교체 / 우측: 추가근무
+    const leftReqs  = dayReqs.filter(r => r.type === 'leave' || r.type === 'off' || r.type === 'swap');
     const rightReqs = dayReqs.filter(r => r.type === 'extra');
     const totalCount = dayReqs.length;
 
     function makeChip(r) {
-      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : 'chip-swap';
-      const stClass = r.status==='pending' ? 'chip-pending' : r.status==='rejected' ? 'chip-rejected' : 'chip-approved ' + typeClass;
+      const typeClass = r.type==='leave' ? 'chip-leave' : r.type==='extra' ? 'chip-extra' : r.type==='off' ? 'chip-off' : 'chip-swap';
       const mine = r.staffName === currentUser?.name ? ' chip-mine' : '';
-      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : '🔄';
+      const icon = r.type==='leave' ? '🌴' : r.type==='extra' ? '⏰' : r.type==='off' ? '🌙' : '🔄';
       // pending일 때는 유형별 색 무시 (빨간), rejected는 회색 취소선, approved는 유형 색
       const cls = r.status === 'approved'
         ? `cal-chip ${typeClass}${mine}`
@@ -846,12 +866,16 @@ function renderCalendar() {
       return `<span class="${cls}">${icon}${r.staffName}(${r.staffTeam})</span>`;
     }
 
-    // 좌측: 연차(상단) → 가로 구분선 → 근무교체(하단) / 우측: 추가근무
+    // 좌측: 연차(상단) → 오프 → 근무교체(하단), 각 그룹 사이 가로 구분선 / 우측: 추가근무
     const leaveReqs = dayReqs.filter(r => r.type === 'leave');
+    const offReqs   = dayReqs.filter(r => r.type === 'off');
     const swapReqs  = dayReqs.filter(r => r.type === 'swap');
-    const leaveSwapDivider = (leaveReqs.length > 0 && swapReqs.length > 0)
-      ? `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>` : '';
-    const leftChips  = leaveReqs.map(makeChip).join('') + leaveSwapDivider + swapReqs.map(makeChip).join('');
+    const hDivider = `<div style="height:1px;background:#E2E8F0;margin:3px 0"></div>`;
+    const leftChips = [
+      leaveReqs.map(makeChip).join(''),
+      offReqs.map(makeChip).join(''),
+      swapReqs.map(makeChip).join(''),
+    ].filter(s => s.length > 0).join(hDivider);
     const rightChips = rightReqs.map(makeChip).join('');
     const leftMore = '', rightMore = '';
 
@@ -907,7 +931,7 @@ window.openDayModal = function(dateStr) {
   document.getElementById('modalDateBadge').textContent = dateStr;
 
   // 날짜 표시 업데이트
-  ['Extra','Leave','Swap'].forEach(k => {
+  ['Extra','Leave','Off','Swap'].forEach(k => {
     const el = document.getElementById(`fp${k}DateDisplay`);
     if (el) el.textContent = dateStr;
   });
@@ -941,7 +965,7 @@ window.switchModalTab = tab => {
 // 유형 선택 시 제한 체크해서 버튼/폼 상태 업데이트
 function checkAndUpdateFormType(type) {
   const check = checkLimit(modalDate, type);
-  const submitBtnMap = { extra: '.btn-extra-c', leave: '.btn-leave-c', swap: '.btn-swap-c' };
+  const submitBtnMap = { extra: '.btn-extra-c', leave: '.btn-leave-c', off: '.btn-off-c', swap: '.btn-swap-c' };
   const btn = document.querySelector(submitBtnMap[type]);
   const warningId = 'modalLimitWarning';
   let warn = document.getElementById(warningId);
@@ -978,6 +1002,7 @@ function renderDayStatus(dateStr) {
   const sections = [
     { type:'leave', icon:'🌴', label:'연차' },
     { type:'extra', icon:'⏰', label:'추가근무' },
+    { type:'off',   icon:'🌙', label:'오프' },
     { type:'swap',  icon:'🔄', label:'근무교체' },
   ];
   let html = '';
@@ -986,10 +1011,11 @@ function renderDayStatus(dateStr) {
     if (!reqs.length) return;
     html += `<div style="font-size:11px;font-weight:800;color:var(--sub);margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">${icon} ${label}</div>`;
     reqs.forEach(r => {
-      const dotColor = type==='leave'?'var(--primary)':type==='extra'?'var(--green)':'var(--purple)';
+      const dotColor = type==='leave'?'var(--primary)':type==='extra'?'var(--green)':type==='off'?'#F59E0B':'var(--purple)';
       const detail = type==='leave'
         ? (r.leaveSubType==='all'?'종일':`${r.startTime||''}~${r.endTime||''}`)
         : type==='extra' ? `${r.startTime}~${r.endTime}`
+        : type==='off' ? (r.memo || '오프')
         : `↔ ${r.swapTarget}`;
       const stCls = r.status==='approved'?'st-approved':r.status==='rejected'?'st-rejected':'st-pending';
       const stLbl = r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중';
@@ -1015,7 +1041,7 @@ function renderDayStatus(dateStr) {
 // ── 모달 신청 유형 전환 ──
 window.setModalType = type => {
   modalType = type;
-  ['extra','leave','swap'].forEach(t => {
+  ['extra','leave','off','swap'].forEach(t => {
     const btn = document.getElementById(`rt-${t}`);
     btn.className = 'req-type-btn';
     if (t === type) btn.classList.add(`active-${t}`);
@@ -1066,6 +1092,9 @@ window.submitModal = async function(type) {
     data.swapTarget = target;
     data.memo = document.getElementById('fpSwapMemo').value;
     data.status = 'approved'; // 근무교체는 관리자 승인 없이 자동승인
+  } else if (type === 'off') {
+    data.memo = document.getElementById('fpOffMemo').value;
+    data.status = 'approved'; // 오프는 자동승인
   }
 
   try {
@@ -1073,7 +1102,7 @@ window.submitModal = async function(type) {
     allRequests.unshift({ ...data, id: Date.now().toString(), createdAt: null });
     showToast('✅ 신청이 완료되었습니다');
     // 폼 초기화
-    ['fpExtraStart','fpExtraEnd','fpExtraMemo','fpLeaveStart','fpLeaveEnd','fpLeaveMemo','fpSwapMemo'].forEach(id => {
+    ['fpExtraStart','fpExtraEnd','fpExtraMemo','fpLeaveStart','fpLeaveEnd','fpLeaveMemo','fpOffMemo','fpSwapMemo'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -1103,10 +1132,11 @@ function loadHistory() {
   }
   list.innerHTML = '';
 
-  // 카테고리별 섹션 (연차 / 추가근무 / 근무교체), 각 섹션 날짜 내림차순
+  // 카테고리별 섹션 (연차 / 추가근무 / 오프 / 근무교체), 각 섹션 날짜 내림차순
   const sections = [
     { type:'leave', icon:'🌴', label:'연차' },
     { type:'extra', icon:'⏰', label:'추가근무' },
+    { type:'off',   icon:'🌙', label:'오프' },
     { type:'swap',  icon:'🔄', label:'근무교체' },
   ];
   let first = true;
@@ -1129,18 +1159,19 @@ function loadHistory() {
 function renderHistItem(r) {
   const div = document.createElement('div');
   div.className = 'history-item';
-  const bc = r.type==='extra'?'badge-extra':r.type==='leave'?'badge-leave':'badge-swap';
-  const tl = r.type==='extra'?'추가근무':r.type==='leave'?'연차':'근무교체';
+  const bc = r.type==='extra'?'badge-extra':r.type==='leave'?'badge-leave':r.type==='off'?'badge-off':'badge-swap';
+  const tl = r.type==='extra'?'추가근무':r.type==='leave'?'연차':r.type==='off'?'오프':'근무교체';
   const sc = r.status==='approved'?'st-approved':r.status==='rejected'?'st-rejected':'st-pending';
-  const sl = r.type==='swap' ? '⚡ 자동승인' : (r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중');
+  const sl = (r.type==='swap'||r.type==='off') ? '⚡ 자동승인' : (r.status==='approved'?'✓ 승인':r.status==='rejected'?'✕ 반려':'검토중');
   let detail = r.date||'';
   if (r.type==='extra') detail += ` · ${r.startTime}~${r.endTime}`;
   else if (r.type==='leave') detail += ` · ${r.leaveSubType==='all'?'종일':(r.startTime+'~'+r.endTime)}`;
   else if (r.type==='swap') detail += ` · ↔${r.swapTarget}`;
+  else if (r.type==='off') detail += ` · 오프`;
 
-  // 수정: 교체만 / 취소: 검토중(pending) 또는 교체(approved 여도 가능)
+  // 수정: 교체만 / 취소: 검토중(pending) 또는 교체·오프(approved 여도 가능)
   const canEdit = r.type === 'swap';
-  const canCancel = r.status === 'pending' || r.type === 'swap';
+  const canCancel = r.status === 'pending' || r.type === 'swap' || r.type === 'off';
   const editBtnStyle   = 'background:#EBF0FB;color:#3B6FD4;border:1px solid #3B6FD4;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
   const cancelBtnStyle = 'background:#FEE2E2;color:#DC2626;border:1px solid #DC2626;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
   let actions = '';
