@@ -1185,24 +1185,18 @@ window.submitModal = async function(type) {
 };
 
 // ── 내 신청 내역 ──
-async function loadHistory() {
+function loadHistory() {
   const list = document.getElementById('historyList');
-  try {
-    const snap = await getDocs(query(collection(db,'schedule_requests'),
-      where('staffName','==',currentUser.name), orderBy('createdAt','desc')));
-    // 관리자 전용 포상/차감/정산/급여차감 항목은 신청 내역에서 제외
-    const items = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => !['bonus','deduct','settlement','salary_deduct'].includes(r.type));
-    if (!items.length) { list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">신청 내역이 없습니다</div>'; return; }
-    list.innerHTML = '';
-    items.forEach(r => list.appendChild(renderHistItem(r)));
-  } catch {
-    list.innerHTML = `
-      <div class="history-item">
-        <span class="h-badge badge-leave">연차</span>
-        <div class="h-info"><div class="h-date">${today()} · 종일</div><div class="h-detail">개인 사정</div></div>
-        <span class="h-status st-approved">✓ 승인</span>
-      </div>`;
+  // onSnapshot으로 구독중인 allRequests에서 내 신청만 필터 (별도 query 불필요)
+  const myReqs = allRequests
+    .filter(r => r.staffName === currentUser?.name && !['bonus','deduct','settlement','salary_deduct'].includes(r.type))
+    .sort((a,b) => (b.date||'') > (a.date||'') ? 1 : -1);
+  if (!myReqs.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub);font-size:13px">신청 내역이 없습니다</div>';
+    return;
   }
+  list.innerHTML = '';
+  myReqs.forEach(r => list.appendChild(renderHistItem(r)));
 }
 
 function renderHistItem(r) {
