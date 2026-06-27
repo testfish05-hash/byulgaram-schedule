@@ -1220,12 +1220,13 @@ function renderHistItem(r) {
   // 수정: 교체만 / 취소: 검토중(pending) 또는 교체(approved 여도 가능)
   const canEdit = r.type === 'swap';
   const canCancel = r.status === 'pending' || r.type === 'swap';
+  const editBtnStyle   = 'background:#EBF0FB;color:#3B6FD4;border:1px solid #3B6FD4;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
+  const cancelBtnStyle = 'background:#FEE2E2;color:#DC2626;border:1px solid #DC2626;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
   let actions = '';
   if (canEdit || canCancel) {
-    const btn = 'font-size:11px;font-weight:700;border-radius:7px;padding:5px 9px;cursor:pointer;border:1.5px solid';
     actions = `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">`;
-    if (canEdit)   actions += `<button onclick="openEditSwap('${r.id}')" style="${btn} var(--purple);background:var(--purple-light);color:var(--purple)">수정</button>`;
-    if (canCancel) actions += `<button onclick="cancelMyReq('${r.id}')" style="${btn} var(--red);background:var(--red-light);color:var(--red)">취소</button>`;
+    if (canEdit)   actions += `<button onclick="openEditSwap('${r.id}')" style="${editBtnStyle}">수정</button>`;
+    if (canCancel) actions += `<button onclick="cancelMyReq('${r.id}')" style="${cancelBtnStyle}">취소</button>`;
     actions += `</div>`;
   }
 
